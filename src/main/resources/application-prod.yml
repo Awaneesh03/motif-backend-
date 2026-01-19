@@ -1,0 +1,25 @@
+# Production-specific configuration
+spring:
+  jpa:
+    show-sql: false
+
+logging:
+  level:
+    com.motif.ideaforge: INFO
+    org.springframework.web: WARN
+    org.hibernate.SQL: WARN
+  file:
+    name: /var/log/idea-forge-backend/application.log
+
+app:
+  rate-limit:
+    enabled: true
+
+server:
+  error:
+    include-stacktrace: never
+    include-exception: false
+
+springdoc:
+  swagger-ui:
+    enabled: false  # Disable Swagger in production

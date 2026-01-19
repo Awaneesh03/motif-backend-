@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: idea-forge-backend
+    ports:
+      - "8080:8080"
+    environment:
+      # Supabase Database
+      - SUPABASE_DB_URL=jdbc:postgresql://db.xxxxx.supabase.co:5432/postgres
+      - SUPABASE_DB_USER=postgres
+      - SUPABASE_DB_PASSWORD=${SUPABASE_DB_PASSWORD}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+
+      # Groq AI
+      - GROQ_API_KEY=${GROQ_API_KEY}
+
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+
+      # Frontend URL for CORS
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+
+      # Spring Profile
+      - SPRING_PROFILES_ACTIVE=dev
+    depends_on:
+      - redis
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: idea-forge-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis123}
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+
+networks:
+  app-network:
+    driver: bridge

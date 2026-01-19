@@ -1,0 +1,75 @@
+package com.motif.ideaforge.model.entity;
+
+import io.hypersistence.utils.hibernate.type.json.JsonType;
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.Type;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * JPA Entity for idea_analyses table
+ */
+@Entity
+@Table(name = "idea_analyses", schema = "public")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class IdeaAnalysis {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    private UUID id;
+
+    @Column(name = "user_id", nullable = false)
+    private UUID userId;
+
+    @Column(name = "idea_title", nullable = false, length = 255)
+    private String ideaTitle;
+
+    @Column(name = "idea_description", nullable = false, columnDefinition = "TEXT")
+    private String ideaDescription;
+
+    @Column(name = "target_market")
+    private String targetMarket;
+
+    @Column(nullable = false)
+    private Integer score;
+
+    @Type(JsonType.class)
+    @Column(columnDefinition = "jsonb")
+    private List<String> strengths;
+
+    @Type(JsonType.class)
+    @Column(columnDefinition = "jsonb")
+    private List<String> weaknesses;
+
+    @Type(JsonType.class)
+    @Column(columnDefinition = "jsonb")
+    private List<String> recommendations;
+
+    @Column(name = "market_size", columnDefinition = "TEXT")
+    private String marketSize;
+
+    @Column(columnDefinition = "TEXT")
+    private String competition;
+
+    @Column(columnDefinition = "TEXT")
+    private String viability;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    @CreationTimestamp
+    private Instant createdAt;
+
+    @Column(name = "updated_at")
+    @UpdateTimestamp
+    private Instant updatedAt;
+}
