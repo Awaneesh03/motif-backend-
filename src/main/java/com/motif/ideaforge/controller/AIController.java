@@ -4,15 +4,18 @@ import com.motif.ideaforge.model.dto.request.AnalyzeIdeaRequest;
 import com.motif.ideaforge.model.dto.request.ChatMessageRequest;
 import com.motif.ideaforge.model.dto.request.GenerateIdeaRequest;
 import com.motif.ideaforge.model.dto.request.EvaluateCaseRequest;
+import com.motif.ideaforge.model.dto.request.GeneratePitchRequest;
 import com.motif.ideaforge.model.dto.response.AnalysisResponse;
 import com.motif.ideaforge.model.dto.response.ChatResponse;
 import com.motif.ideaforge.model.dto.response.IdeaResponse;
 import com.motif.ideaforge.model.dto.response.CaseEvaluationResponse;
+import com.motif.ideaforge.model.dto.response.PitchResponse;
 import com.motif.ideaforge.security.UserPrincipal;
 import com.motif.ideaforge.service.ai.ChatbotService;
 import com.motif.ideaforge.service.ai.IdeaAnalyzerService;
 import com.motif.ideaforge.service.ai.IdeaGeneratorService;
 import com.motif.ideaforge.service.ai.CaseEvaluatorService;
+import com.motif.ideaforge.service.PitchGeneratorService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,8 +29,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/ai")
 @RequiredArgsConstructor
-@Slf4j
-@Tag(name = "AI Services", description = "AI-powered endpoints")
+@Slf4j@Tag(name = "AI Services", description = "AI-powered endpoints")
 @SecurityRequirement(name = "Bearer Authentication")
 public class AIController {
 
@@ -35,6 +37,7 @@ public class AIController {
     private final ChatbotService chatbotService;
     private final IdeaGeneratorService ideaGeneratorService;
     private final CaseEvaluatorService caseEvaluatorService;
+    private final PitchGeneratorService pitchGeneratorService;
 
     @PostMapping("/analyze-idea")
     @Operation(summary = "Analyze a startup idea")
@@ -73,6 +76,16 @@ public class AIController {
             @AuthenticationPrincipal UserPrincipal user) {
         log.info("Evaluating case for user: {}", user.getId());
         CaseEvaluationResponse response = caseEvaluatorService.evaluateCase(user.getId(), request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/generate-pitch")
+    @Operation(summary = "Generate a pitch deck")
+    public ResponseEntity<PitchResponse> generatePitch(
+            @Valid @RequestBody GeneratePitchRequest request,
+            @AuthenticationPrincipal UserPrincipal user) {
+        log.info("Generating pitch deck for user: {}", user.getId());
+        PitchResponse response = pitchGeneratorService.generatePitch(request);
         return ResponseEntity.ok(response);
     }
 }
