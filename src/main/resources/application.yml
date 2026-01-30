@@ -53,16 +53,16 @@ spring:
 # Application-specific configuration
 app:
   groq:
-    api-key: ${GROQ_API_KEY}
+    api-key: ${GROQ_API_KEY:dummy-key-for-startup}
     base-url: ${GROQ_BASE_URL:https://api.groq.com/openai/v1}
     model: ${GROQ_MODEL:llama-3.3-70b-versatile}
     timeout: ${GROQ_TIMEOUT:30000}
     max-retries: 3
 
   supabase:
-    url: ${SUPABASE_URL}
-    jwt-secret: ${SUPABASE_JWT_SECRET}
-    anon-key: ${SUPABASE_ANON_KEY}
+    url: ${SUPABASE_URL:http://localhost:54321}
+    jwt-secret: ${SUPABASE_JWT_SECRET:dummy-jwt-secret-for-startup}
+    anon-key: ${SUPABASE_ANON_KEY:dummy-anon-key}
 
   rate-limit:
     enabled: ${RATE_LIMIT_ENABLED:true}
