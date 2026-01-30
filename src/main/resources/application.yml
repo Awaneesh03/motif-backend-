@@ -61,8 +61,8 @@ app:
 
   supabase:
     url: ${SUPABASE_URL:http://localhost:54321}
-    jwt-secret: ${SUPABASE_JWT_SECRET:dummy-jwt-secret-for-startup}
-    anon-key: ${SUPABASE_ANON_KEY:dummy-anon-key}
+    jwt-secret: ${SUPABASE_JWT_SECRET:dummyJwtSecretForStartupThatIsAtLeast32BytesLongToSatisfyHmacSha256Requirements}
+    anon-key: ${SUPABASE_ANON_KEY:dummy-anon-key-placeholder}
 
   rate-limit:
     enabled: ${RATE_LIMIT_ENABLED:true}
