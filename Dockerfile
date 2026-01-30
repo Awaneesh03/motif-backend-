@@ -51,7 +51,13 @@ USER spring:spring
 
 # Railway provides PORT env variable dynamically
 # Spring Boot will use ${PORT:8080} from application.yml
-ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
+# JVM Options optimized for Railway deployment
+ENV JAVA_OPTS="-XX:+UseContainerSupport \
+-XX:MaxRAMPercentage=75.0 \
+-XX:+ExitOnOutOfMemoryError \
+-XX:+HeapDumpOnOutOfMemoryError \
+-Djava.security.egd=file:/dev/./urandom \
+-Dspring.profiles.active=prod"
 
 # Expose port (Railway ignores this, but good for documentation)
 EXPOSE ${PORT:-8080}
