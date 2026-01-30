@@ -75,6 +75,7 @@ app:
 # Server configuration
 server:
   port: ${PORT:8080}
+  address: 0.0.0.0  # Bind to all interfaces (required for Docker)
   error:
     include-message: always
     include-binding-errors: always

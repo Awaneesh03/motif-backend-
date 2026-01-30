@@ -1,0 +1,54 @@
+# Docker build optimization - exclude unnecessary files
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.idea
+.vscode
+*.iml
+*.ipr
+*.iws
+
+# Build outputs
+target/
+!target/idea-forge-backend.jar
+build/
+dist/
+out/
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+README.md
+docs/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Maven wrapper (we don't use it)
+.mvn/
+mvnw
+mvnw.cmd
+
+# Tests
+src/test/
+
+# Railway/Deployment configs
+railway.json
+nixpacks.toml
+docker-compose.yml

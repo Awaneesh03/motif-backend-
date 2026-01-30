@@ -1,40 +1,65 @@
-# Multi-stage Docker build for Java Spring Boot application
+# Production-grade multi-stage Docker build for Railway deployment
+# This Dockerfile does NOT require Maven wrapper (mvnw)
 
-# Stage 1: Build the application
-FROM eclipse-temurin:17-jdk-alpine AS build
-WORKDIR /app
+# ============================================
+# Stage 1: Build Stage
+# ============================================
+FROM maven:3.9-eclipse-temurin-17-alpine AS build
 
-# Copy Maven wrapper and pom.xml
-COPY mvnw .
-COPY .mvn .mvn
+WORKDIR /build
+
+# Copy POM file first for dependency caching
 COPY pom.xml .
 
-# Download dependencies
-RUN ./mvnw dependency:go-offline -B
+# Download dependencies (cached layer)
+RUN mvn dependency:go-offline -B
 
 # Copy source code
 COPY src ./src
 
-# Build the application
-RUN ./mvnw clean package -DskipTests
+# Build the application (skip tests for faster builds)
+RUN mvn clean package -DskipTests -B && \
+    # Verify JAR was created
+    ls -lh target/ && \
+    # Rename to app.jar for consistency
+    mv target/idea-forge-backend.jar target/app.jar
 
-# Stage 2: Run the application
-FROM eclipse-temurin:17-jre-alpine
+# ============================================
+# Stage 2: Runtime Stage
+# ============================================
+FROM eclipse-temurin:17-jre-jammy
+
 WORKDIR /app
 
-# Create a non-root user
-RUN addgroup -S spring && adduser -S spring -G spring
+# Install wget for healthchecks (optional)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends wget && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN groupadd -r spring && useradd -r -g spring spring
+
+# Copy JAR from build stage
+COPY --from=build /build/target/app.jar /app/app.jar
+
+# Change ownership to non-root user
+RUN chown -R spring:spring /app
+
+# Switch to non-root user
 USER spring:spring
 
-# Copy the built JAR from build stage
-COPY --from=build /app/target/idea-forge-backend.jar app.jar
+# Railway provides PORT env variable dynamically
+# Spring Boot will use ${PORT:8080} from application.yml
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.security.egd=file:/dev/./urandom"
 
-# Expose port
-EXPOSE 8080
+# Expose port (Railway ignores this, but good for documentation)
+EXPOSE ${PORT:-8080}
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=60s \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
+# Healthcheck (uses PORT env var or defaults to 8080)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/actuator/health || exit 1
 
 # Run the application
-ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
+# Railway will inject PORT env var automatically
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -Dserver.port=${PORT:-8080} -jar app.jar"]
