@@ -116,9 +116,13 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+      probes:
+        enabled: true  # Enable liveness and readiness probes
   health:
     redis:
-      enabled: true
+      enabled: false  # Don't fail health check if Redis is unavailable
+    db:
+      enabled: true  # Database is required
 
 # SpringDoc OpenAPI (Swagger) configuration
 springdoc:

@@ -56,9 +56,10 @@ ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -Djava.securit
 # Expose port (Railway ignores this, but good for documentation)
 EXPOSE ${PORT:-8080}
 
-# Healthcheck (uses PORT env var or defaults to 8080)
-HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/actuator/health || exit 1
+# Healthcheck - Railway will handle this, but keeping for local testing
+# Note: Use wget with full URL, PORT is injected at runtime
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health 2>&1 || exit 1
 
 # Run the application
 # Railway will inject PORT env var automatically
