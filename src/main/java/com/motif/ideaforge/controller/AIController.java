@@ -5,6 +5,7 @@ import com.motif.ideaforge.model.dto.request.ChatMessageRequest;
 import com.motif.ideaforge.model.dto.request.GenerateIdeaRequest;
 import com.motif.ideaforge.model.dto.request.EvaluateCaseRequest;
 import com.motif.ideaforge.model.dto.request.GeneratePitchRequest;
+import com.motif.ideaforge.model.dto.request.ImproveDescriptionRequest;
 import com.motif.ideaforge.model.dto.response.AnalysisResponse;
 import com.motif.ideaforge.model.dto.response.ChatResponse;
 import com.motif.ideaforge.model.dto.response.IdeaResponse;
@@ -29,7 +30,8 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/ai")
 @RequiredArgsConstructor
-@Slf4j@Tag(name = "AI Services", description = "AI-powered endpoints")
+@Slf4j
+@Tag(name = "AI Services", description = "AI-powered endpoints")
 @SecurityRequirement(name = "Bearer Authentication")
 public class AIController {
 
@@ -86,6 +88,25 @@ public class AIController {
             @AuthenticationPrincipal UserPrincipal user) {
         log.info("Generating pitch deck for user: {}", user.getId());
         PitchResponse response = pitchGeneratorService.generatePitch(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/improve-description")
+    @Operation(summary = "Improve a startup description")
+    public ResponseEntity<ChatResponse> improveDescription(
+            @Valid @RequestBody ImproveDescriptionRequest request,
+            @AuthenticationPrincipal UserPrincipal user) {
+        log.info("Improving description for user: {}", user.getId());
+
+        // Use chatbot service with specific prompt for description improvement
+        String prompt = "Please improve this startup description to make it more compelling, clear, and professional. Keep it concise but impactful:\n\n" + request.getDescription();
+
+        ChatMessageRequest chatRequest = ChatMessageRequest.builder()
+                .message(prompt)
+                .history(java.util.Collections.emptyList())
+                .build();
+
+        ChatResponse response = chatbotService.processMessage(user.getId(), chatRequest);
         return ResponseEntity.ok(response);
     }
 }
