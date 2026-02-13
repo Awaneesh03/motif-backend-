@@ -1,5 +1,6 @@
 package com.motif.ideaforge.service.ai;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.motif.ideaforge.exception.AIServiceException;
 import lombok.AllArgsConstructor;
@@ -86,10 +87,16 @@ public class GroqService {
                     }
 
                     String responseBody = response.body().string();
+                    log.debug("Groq API response: {}", responseBody);
+                    
                     GroqResponse groqResponse = objectMapper.readValue(responseBody, GroqResponse.class);
 
-                    log.info("Groq API call successful. Tokens used: {}",
-                            groqResponse.getUsage() != null ? groqResponse.getUsage().getTotalTokens() : 0);
+                    // Safely get token count with null checks
+                    int tokensUsed = 0;
+                    if (groqResponse.getUsage() != null && groqResponse.getUsage().getTotalTokens() != null) {
+                        tokensUsed = groqResponse.getUsage().getTotalTokens();
+                    }
+                    log.info("Groq API call successful. Tokens used: {}", tokensUsed);
 
                     return groqResponse;
                 }
@@ -112,6 +119,8 @@ public class GroqService {
         private String model;
         private List<ChatMessage> messages;
         private Double temperature;
+        
+        @JsonProperty("max_tokens")
         private Integer maxTokens;
     }
 
@@ -142,6 +151,8 @@ public class GroqService {
     public static class Choice {
         private Integer index;
         private Message message;
+        
+        @JsonProperty("finish_reason")
         private String finishReason;
     }
 
@@ -157,8 +168,13 @@ public class GroqService {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class Usage {
+        @JsonProperty("prompt_tokens")
         private Integer promptTokens;
+        
+        @JsonProperty("completion_tokens")
         private Integer completionTokens;
+        
+        @JsonProperty("total_tokens")
         private Integer totalTokens;
     }
 }
