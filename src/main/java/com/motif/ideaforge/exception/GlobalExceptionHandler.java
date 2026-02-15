@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 
 /**
@@ -111,6 +112,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
                 .body(errorResponse);
+    }
+
+    @ExceptionHandler(CompletionException.class)
+    public ResponseEntity<ErrorResponse> handleCompletionException(
+            CompletionException ex,
+            HttpServletRequest request) {
+        Throwable cause = ex.getCause();
+        if (cause instanceof BaseException baseEx) {
+            return handleBaseException(baseEx, request);
+        }
+        return handleGenericException(ex, request);
     }
 
     @ExceptionHandler(Exception.class)

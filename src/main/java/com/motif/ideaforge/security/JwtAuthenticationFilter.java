@@ -37,27 +37,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String requestPath = request.getRequestURI();
         String method = request.getMethod();
         
-        log.info("=== JWT FILTER: {} {} ===", method, requestPath);
-        log.info("Authorization header present: {}", authHeader != null);
+        log.debug("JWT FILTER: {} {}", method, requestPath);
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            log.info("No Bearer token - proceeding without authentication");
+            log.debug("No Bearer token - proceeding without authentication");
             filterChain.doFilter(request, response);
             return;
         }
 
-        log.info("Bearer token found, length: {} chars", authHeader.length() - 7);
-
         try {
             String jwt = authHeader.substring(7);
-            log.info("Attempting to validate JWT...");
-            
             Claims claims = jwtValidator.validateToken(jwt);
 
             String userId = claims.getSubject();
             String email = claims.get("email", String.class);
-            
-            log.info("JWT VALID - User ID: {}, Email: {}", userId, email);
+
+            log.debug("JWT validated for user: {}", userId);
 
             UserPrincipal principal = new UserPrincipal(userId, email);
 
@@ -71,11 +66,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
-            log.info("SecurityContext set - User authenticated successfully");
-
         } catch (Exception e) {
-            log.error("JWT validation FAILED: {}", e.getMessage());
-            log.error("Authentication will be cleared - request will be denied");
+            log.warn("JWT validation failed: {}", e.getMessage());
             SecurityContextHolder.clearContext();
         }
 

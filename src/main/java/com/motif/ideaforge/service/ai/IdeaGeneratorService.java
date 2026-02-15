@@ -9,6 +9,7 @@ import com.motif.ideaforge.service.ai.GroqService.GroqResponse;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -46,7 +47,7 @@ public class IdeaGeneratorService {
         }
     }
 
-    @Data @Builder @AllArgsConstructor
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class GeneratedIdea {
         private String title;
         private String description;

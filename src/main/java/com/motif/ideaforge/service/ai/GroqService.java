@@ -86,9 +86,12 @@ public class GroqService {
                         throw new AIServiceException("Groq API error: " + response.code());
                     }
 
+                    if (response.body() == null) {
+                        throw new AIServiceException("Groq API returned empty response");
+                    }
                     String responseBody = response.body().string();
-                    log.debug("Groq API response: {}", responseBody);
-                    
+                    log.debug("Groq API response received, length: {}", responseBody.length());
+
                     GroqResponse groqResponse = objectMapper.readValue(responseBody, GroqResponse.class);
 
                     // Safely get token count with null checks
