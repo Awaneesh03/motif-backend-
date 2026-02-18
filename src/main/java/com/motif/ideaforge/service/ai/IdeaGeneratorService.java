@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.motif.ideaforge.exception.AIServiceException;
 import com.motif.ideaforge.model.dto.request.GenerateIdeaRequest;
 import com.motif.ideaforge.model.dto.response.IdeaResponse;
-import com.motif.ideaforge.service.ai.GroqService.ChatMessage;
-import com.motif.ideaforge.service.ai.GroqService.GroqResponse;
+import com.motif.ideaforge.service.ai.OpenAIService.ChatMessage;
+import com.motif.ideaforge.service.ai.OpenAIService.OpenAIResponse;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -22,7 +22,7 @@ import java.util.UUID;
 @Slf4j
 public class IdeaGeneratorService {
 
-    private final GroqService groqService;
+    private final OpenAIService openAIService;
     private final ObjectMapper objectMapper;
 
     public IdeaResponse generateIdea(UUID userId, GenerateIdeaRequest request) {
@@ -32,7 +32,7 @@ public class IdeaGeneratorService {
             ChatMessage.builder().role("system").content("You are a creative startup ideator. Return valid JSON only.").build(),
             ChatMessage.builder().role("user").content(prompt).build()
         );
-        GroqResponse resp = groqService.sendChatCompletion(messages, 0.9, 500).join();
+        OpenAIResponse resp = openAIService.sendChatCompletion(messages, 0.9, 500).join();
         String content = resp.getChoices().get(0).getMessage().getContent();
         GeneratedIdea idea = parseResponse(content);
         return IdeaResponse.builder().title(idea.getTitle()).description(idea.getDescription()).targetMarket(idea.getTargetMarket()).build();

@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.motif.ideaforge.exception.AIServiceException;
 import com.motif.ideaforge.model.dto.request.EvaluateCaseRequest;
 import com.motif.ideaforge.model.dto.response.CaseEvaluationResponse;
-import com.motif.ideaforge.service.ai.GroqService.ChatMessage;
-import com.motif.ideaforge.service.ai.GroqService.GroqResponse;
+import com.motif.ideaforge.service.ai.OpenAIService.ChatMessage;
+import com.motif.ideaforge.service.ai.OpenAIService.OpenAIResponse;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -23,7 +23,7 @@ import java.util.UUID;
 @Slf4j
 public class CaseEvaluatorService {
 
-    private final GroqService groqService;
+    private final OpenAIService openAIService;
     private final ObjectMapper objectMapper;
 
     public CaseEvaluationResponse evaluateCase(UUID userId, EvaluateCaseRequest request) {
@@ -33,7 +33,7 @@ public class CaseEvaluatorService {
             ChatMessage.builder().role("system").content("You are an expert startup advisor. Evaluate solutions. Return valid JSON only.").build(),
             ChatMessage.builder().role("user").content(prompt).build()
         );
-        GroqResponse resp = groqService.sendChatCompletion(messages, 0.3, 1000).join();
+        OpenAIResponse resp = openAIService.sendChatCompletion(messages, 0.3, 1000).join();
         String content = resp.getChoices().get(0).getMessage().getContent();
         EvalResult result = parseResponse(content);
         return CaseEvaluationResponse.builder().score(result.getScore()).verdict(result.getVerdict()).feedback(result.getFeedback()).strengths(result.getStrengths()).improvements(result.getImprovements()).timestamp(Instant.now()).build();

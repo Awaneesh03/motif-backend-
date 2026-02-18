@@ -3,8 +3,8 @@ package com.motif.ideaforge.service;
 import com.motif.ideaforge.model.dto.request.GeneratePitchRequest;
 import com.motif.ideaforge.model.dto.response.PitchResponse;
 import com.motif.ideaforge.model.dto.response.PitchResponse.SlideContent;
-import com.motif.ideaforge.service.ai.GroqService;
-import com.motif.ideaforge.service.ai.GroqService.ChatMessage;
+import com.motif.ideaforge.service.ai.OpenAIService;
+import com.motif.ideaforge.service.ai.OpenAIService.ChatMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,7 +18,7 @@ import java.util.concurrent.ExecutionException;
 @RequiredArgsConstructor
 public class PitchGeneratorService {
 
-    private final GroqService groqService;
+    private final OpenAIService openAIService;
 
     public PitchResponse generatePitch(GeneratePitchRequest request) {
         log.info("Generating pitch deck for idea: {}", request.getIdeaName());
@@ -36,7 +36,7 @@ public class PitchGeneratorService {
                 .content(prompt)
                 .build());
             
-            GroqService.GroqResponse response = groqService.sendChatCompletion(messages, 0.7, 4000).get();
+            OpenAIService.OpenAIResponse response = openAIService.sendChatCompletion(messages, 0.7, 4000).get();
             
             if (response.getChoices() != null && !response.getChoices().isEmpty()) {
                 String aiResponse = response.getChoices().get(0).getMessage().getContent();

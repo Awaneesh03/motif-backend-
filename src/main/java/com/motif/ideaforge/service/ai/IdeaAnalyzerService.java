@@ -6,8 +6,8 @@ import com.motif.ideaforge.model.dto.request.AnalyzeIdeaRequest;
 import com.motif.ideaforge.model.dto.response.AnalysisResponse;
 import com.motif.ideaforge.model.entity.IdeaAnalysis;
 import com.motif.ideaforge.repository.IdeaAnalysisRepository;
-import com.motif.ideaforge.service.ai.GroqService.ChatMessage;
-import com.motif.ideaforge.service.ai.GroqService.GroqResponse;
+import com.motif.ideaforge.service.ai.OpenAIService.ChatMessage;
+import com.motif.ideaforge.service.ai.OpenAIService.OpenAIResponse;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -29,7 +29,7 @@ import java.util.UUID;
 @Slf4j
 public class IdeaAnalyzerService {
 
-    private final GroqService groqService;
+    private final OpenAIService openAIService;
     private final IdeaAnalysisRepository ideaAnalysisRepository;
     private final ObjectMapper objectMapper;
 
@@ -50,13 +50,13 @@ public class IdeaAnalyzerService {
                         .build()
         );
 
-        // Call Groq API
-        GroqResponse groqResponse = groqService
+        // Call OpenAI API
+        OpenAIResponse openAIResponse = openAIService
                 .sendChatCompletion(messages, 0.3, 1500)
                 .join();
 
         // Parse response
-        String aiResponse = groqResponse.getChoices().get(0).getMessage().getContent();
+        String aiResponse = openAIResponse.getChoices().get(0).getMessage().getContent();
         AnalysisResult analysis = parseAnalysisResponse(aiResponse);
 
         // Save to database

@@ -2,8 +2,8 @@ package com.motif.ideaforge.service.ai;
 
 import com.motif.ideaforge.model.dto.request.ChatMessageRequest;
 import com.motif.ideaforge.model.dto.response.ChatResponse;
-import com.motif.ideaforge.service.ai.GroqService.ChatMessage;
-import com.motif.ideaforge.service.ai.GroqService.GroqResponse;
+import com.motif.ideaforge.service.ai.OpenAIService.ChatMessage;
+import com.motif.ideaforge.service.ai.OpenAIService.OpenAIResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,7 +21,7 @@ import java.util.UUID;
 @Slf4j
 public class ChatbotService {
 
-    private final GroqService groqService;
+    private final OpenAIService openAIService;
 
     public ChatResponse processMessage(UUID userId, ChatMessageRequest request) {
         log.info("Processing chat message for user: {}", userId);
@@ -49,12 +49,12 @@ public class ChatbotService {
                 .content(request.getMessage())
                 .build());
 
-        // Call Groq API
-        GroqResponse groqResponse = groqService
+        // Call OpenAI API
+        OpenAIResponse openAIResponse = openAIService
                 .sendChatCompletion(messages, 0.7, 4000)
                 .join();
 
-        String response = groqResponse.getChoices().get(0).getMessage().getContent();
+        String response = openAIResponse.getChoices().get(0).getMessage().getContent();
 
         log.info("Chat message processed successfully");
 
