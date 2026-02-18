@@ -76,6 +76,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
+        // Skip JWT validation for OPTIONS preflight requests
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
         String path = request.getRequestURI();
         return path.startsWith("/actuator/") ||
                 path.startsWith("/swagger-ui/") ||
