@@ -311,22 +311,22 @@ public class OpenAIService {
                         return;
                     }
 
-                    try (ResponseBody body = response.body()) {
-                        if (body == null) {
-                            emitter.completeWithError(new AIServiceException("Empty streaming response from OpenAI"));
-                            return;
-                        }
+                    ResponseBody body = response.body();
+                    if (body == null) {
+                        try { emitter.completeWithError(new AIServiceException("Empty streaming response from OpenAI")); } catch (Exception ignored) {}
+                        return;
+                    }
 
-                        okio.BufferedSource source = body.source();
-                        while (!source.exhausted()) {
-                            String line = source.readUtf8Line();
-                            if (line == null) break;
+                    try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(body.byteStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
                             if (!line.startsWith("data: ")) continue;
 
                             String data = line.substring(6).trim();
                             if ("[DONE]".equals(data)) {
                                 emitter.complete();
-                                break;
+                                return;
                             }
 
                             try {
@@ -341,6 +341,7 @@ public class OpenAIService {
                                 log.debug("Skipping malformed SSE chunk: {}", data);
                             }
                         }
+                        emitter.complete();
                     } catch (Exception e) {
                         log.error("Error reading streaming response: {}", e.getMessage());
                         try { emitter.completeWithError(e); } catch (Exception ignored) {}
