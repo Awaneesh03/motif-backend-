@@ -38,7 +38,7 @@ public class IdeaAnalyzerService {
     private static final int TIMEOUT_SECONDS = 90;  // Increased timeout for detailed analysis
     private static final double TEMPERATURE = 0.3;  // Lower = more consistent results
 
-    @Transactional
+    // Removed @Transactional to allow returning results even if DB save fails
     public AnalysisResponse analyzeIdea(UUID userId, AnalyzeIdeaRequest request) {
         long startTime = System.currentTimeMillis();
         log.info("=== IDEA ANALYZER SERVICE START ===");
@@ -85,7 +85,7 @@ public class IdeaAnalyzerService {
                 analysis.getStrengths() != null ? analysis.getStrengths().size() : 0,
                 analysis.getWeaknesses() != null ? analysis.getWeaknesses().size() : 0);
 
-        // Save to database
+        // Try to save to database (optional - don't fail if DB is unavailable)
         IdeaAnalysis entity = IdeaAnalysis.builder()
                 .userId(userId)
                 .ideaTitle(effectiveTitle)
@@ -100,13 +100,28 @@ public class IdeaAnalyzerService {
                 .viability(analysis.getViability())
                 .build();
 
-        IdeaAnalysis saved = ideaAnalysisRepository.save(entity);
-        
-        long duration = System.currentTimeMillis() - startTime;
-        log.info("=== ANALYSIS COMPLETE === ID: {}, Score: {}, Duration: {}ms", 
-                saved.getId(), saved.getScore(), duration);
-
-        return AnalysisResponse.fromEntity(saved);
+        try {
+            IdeaAnalysis saved = ideaAnalysisRepository.save(entity);
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("=== ANALYSIS COMPLETE === ID: {}, Score: {}, Duration: {}ms", 
+                    saved.getId(), saved.getScore(), duration);
+            return AnalysisResponse.fromEntity(saved);
+        } catch (Exception dbException) {
+            log.warn("Failed to save analysis to database, returning result anyway: {}", dbException.getMessage());
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("=== ANALYSIS COMPLETE (not saved) === Score: {}, Duration: {}ms", 
+                    analysis.getScore(), duration);
+            // Return the analysis result even if DB save failed
+            return AnalysisResponse.builder()
+                    .score(analysis.getScore())
+                    .strengths(analysis.getStrengths())
+                    .weaknesses(analysis.getWeaknesses())
+                    .recommendations(analysis.getRecommendations())
+                    .marketSize(analysis.getMarketSize())
+                    .competition(analysis.getCompetition())
+                    .viability(analysis.getViability())
+                    .build();
+        }
     }
 
     private String buildAnalysisPrompt(String title, String description, String targetMarket) {
