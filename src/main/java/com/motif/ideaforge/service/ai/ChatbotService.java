@@ -7,6 +7,7 @@ import com.motif.ideaforge.service.ai.OpenAIService.OpenAIResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -15,6 +16,7 @@ import java.util.UUID;
 
 /**
  * Service for chatbot functionality
+ * Optimized for fast responses
  */
 @Service
 @RequiredArgsConstructor
@@ -22,41 +24,27 @@ import java.util.UUID;
 public class ChatbotService {
 
     private final OpenAIService openAIService;
+    
+    // Reduced token limits for faster responses
+    private static final int MAX_TOKENS = 800;  // Was 4000 - much faster now
+    private static final int TIMEOUT_SECONDS = 45;  // Timeout for chat responses
+    private static final double TEMPERATURE = 0.7;
 
     public ChatResponse processMessage(UUID userId, ChatMessageRequest request) {
-        log.info("Processing chat message for user: {}", userId);
+        long startTime = System.currentTimeMillis();
+        log.info("=== CHAT REQUEST === User: {}, Message length: {}", userId,
+                request.getMessage() != null ? request.getMessage().length() : 0);
 
-        // Build message history
-        List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.builder()
-                .role("system")
-                .content(getChatbotSystemPrompt())
-                .build());
+        List<ChatMessage> messages = buildMessages(request);
 
-        // Add conversation history
-        if (request.getHistory() != null && !request.getHistory().isEmpty()) {
-            request.getHistory().forEach(historyItem ->
-                    messages.add(ChatMessage.builder()
-                            .role(historyItem.getRole())
-                            .content(historyItem.getContent())
-                            .build())
-            );
-        }
-
-        // Add current message
-        messages.add(ChatMessage.builder()
-                .role("user")
-                .content(request.getMessage())
-                .build());
-
-        // Call OpenAI API
-        OpenAIResponse openAIResponse = openAIService
-                .sendChatCompletion(messages, 0.7, 4000)
-                .join();
+        // Call OpenAI API with timeout
+        OpenAIResponse openAIResponse = openAIService.sendChatCompletionWithTimeout(
+                messages, TEMPERATURE, MAX_TOKENS, TIMEOUT_SECONDS);
 
         String response = openAIResponse.getChoices().get(0).getMessage().getContent();
 
-        log.info("Chat message processed successfully");
+        long duration = System.currentTimeMillis() - startTime;
+        log.info("=== CHAT SUCCESS === Duration: {}ms, Response length: {}", duration, response.length());
 
         return ChatResponse.builder()
                 .message(response)
@@ -66,19 +54,57 @@ public class ChatbotService {
                 .build();
     }
 
+    public SseEmitter streamMessage(UUID userId, ChatMessageRequest request) {
+        log.info("=== CHAT STREAM REQUEST === User: {}, Message length: {}", userId,
+                request.getMessage() != null ? request.getMessage().length() : 0);
+
+        SseEmitter emitter = new SseEmitter(60_000L); // 60 second timeout
+        emitter.onTimeout(emitter::complete);
+
+        List<ChatMessage> messages = buildMessages(request);
+        openAIService.streamChatCompletion(messages, TEMPERATURE, MAX_TOKENS, emitter);
+
+        return emitter;
+    }
+
+    private List<ChatMessage> buildMessages(ChatMessageRequest request) {
+        List<ChatMessage> messages = new ArrayList<>();
+        messages.add(ChatMessage.builder()
+                .role("system")
+                .content(getChatbotSystemPrompt())
+                .build());
+
+        // Add conversation history (limit to last 10 messages to keep context small)
+        if (request.getHistory() != null && !request.getHistory().isEmpty()) {
+            int historyStart = Math.max(0, request.getHistory().size() - 10);
+            request.getHistory().subList(historyStart, request.getHistory().size())
+                    .forEach(historyItem ->
+                            messages.add(ChatMessage.builder()
+                                    .role(historyItem.getRole())
+                                    .content(historyItem.getContent())
+                                    .build())
+                    );
+            log.debug("Added {} history messages", Math.min(request.getHistory().size(), 10));
+        }
+
+        // Add current message
+        messages.add(ChatMessage.builder()
+                .role("user")
+                .content(request.getMessage())
+                .build());
+
+        return messages;
+    }
+
     private String getChatbotSystemPrompt() {
+        // Shortened prompt for faster processing
         return """
-                You are Motif AI, a helpful assistant for the Motif platform that helps entrepreneurs
-                and founders with their startup ideas. You specialize in:
-
-                - Evaluating startup ideas and providing constructive feedback
-                - Answering questions about business strategy, market validation, and product development
-                - Offering insights on fundraising, growth strategies, and scaling
-                - Providing resources and best practices for startups
-
-                Be conversational, supportive, and practical. Provide actionable advice when possible.
-                If you don't know something, admit it rather than making up information.
-                Keep responses concise but informative.
+                You are Motif AI, a helpful startup assistant. You help entrepreneurs with:
+                - Evaluating and refining startup ideas
+                - Business strategy and market validation
+                - Fundraising and growth advice
+                
+                Be concise, practical, and actionable. Keep responses under 300 words unless more detail is needed.
                 """;
     }
 }

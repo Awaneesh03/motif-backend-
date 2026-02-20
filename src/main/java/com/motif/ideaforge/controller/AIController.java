@@ -23,9 +23,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/api/ai")
@@ -41,14 +43,48 @@ public class AIController {
     private final CaseEvaluatorService caseEvaluatorService;
     private final PitchGeneratorService pitchGeneratorService;
 
-    @PostMapping("/analyze-idea")
+    /**
+     * Analyze a startup idea - Primary endpoint
+     * Supports both simple {"idea": "..."} and detailed {"title": "...", "description": "..."} formats
+     */
+    @PostMapping({"/analyze-idea", "/analyze"})
     @Operation(summary = "Analyze a startup idea")
     public ResponseEntity<AnalysisResponse> analyzeIdea(
             @Valid @RequestBody AnalyzeIdeaRequest request,
             @AuthenticationPrincipal UserPrincipal user) {
-        log.info("Analyzing idea for user: {}", user.getId());
-        AnalysisResponse response = ideaAnalyzerService.analyzeIdea(user.getId(), request);
-        return ResponseEntity.ok(response);
+        
+        // Log incoming request for debugging
+        log.info("=== ANALYZE IDEA REQUEST ===");
+        log.info("User ID: {}", user.getId());
+        log.info("Request Body - idea: {}", request.getIdea());
+        log.info("Request Body - title: {}", request.getTitle());
+        log.info("Request Body - description: {}", request.getDescription());
+        log.info("Request Body - targetMarket: {}", request.getTargetMarket());
+        
+        // Validate that we have either 'idea' or 'title'+'description'
+        if (!request.hasValidInput()) {
+            log.error("Invalid request: No valid input provided. Need 'idea' OR ('title' AND 'description')");
+            throw new com.motif.ideaforge.exception.ValidationException(
+                "Invalid request: Provide either 'idea' field OR both 'title' and 'description' fields",
+                java.util.List.of(java.util.Map.of(
+                    "field", "idea/title/description",
+                    "message", "Provide either 'idea' field OR both 'title' and 'description' fields"
+                ))
+            );
+        }
+        
+        log.info("Effective title: {}", request.getEffectiveTitle());
+        log.info("Effective description: {} chars", 
+                request.getEffectiveDescription() != null ? request.getEffectiveDescription().length() : 0);
+        
+        try {
+            AnalysisResponse response = ideaAnalyzerService.analyzeIdea(user.getId(), request);
+            log.info("=== ANALYZE IDEA SUCCESS === Score: {}", response.getScore());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("=== ANALYZE IDEA FAILED ===", e);
+            throw e;
+        }
     }
 
     @PostMapping("/chat")
@@ -59,6 +95,15 @@ public class AIController {
         log.info("Processing chat for user: {}", user.getId());
         ChatResponse response = chatbotService.processMessage(user.getId(), request);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(summary = "Stream chat with AI assistant (SSE)")
+    public SseEmitter chatStream(
+            @Valid @RequestBody ChatMessageRequest request,
+            @AuthenticationPrincipal UserPrincipal user) {
+        log.info("Processing streaming chat for user: {}", user.getId());
+        return chatbotService.streamMessage(user.getId(), request);
     }
 
     @PostMapping("/generate-idea")
