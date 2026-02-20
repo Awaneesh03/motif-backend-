@@ -32,13 +32,33 @@ public class IdeaAnalyzerService {
     private final OpenAIService openAIService;
     private final IdeaAnalysisRepository ideaAnalysisRepository;
     private final ObjectMapper objectMapper;
+    
+    // Analysis settings
+    private static final int MAX_TOKENS = 1200;  // Enough for detailed JSON response
+    private static final int TIMEOUT_SECONDS = 60;  // Timeout for analysis
+    private static final double TEMPERATURE = 0.3;  // Lower = more consistent results
 
     @Transactional
     public AnalysisResponse analyzeIdea(UUID userId, AnalyzeIdeaRequest request) {
-        log.info("Analyzing idea for user: {}", userId);
+        long startTime = System.currentTimeMillis();
+        log.info("=== IDEA ANALYZER SERVICE START ===");
+        log.info("User ID: {}", userId);
+        
+        // Get effective values (supports both simple 'idea' and detailed 'title'+'description' formats)
+        String effectiveTitle = request.getEffectiveTitle();
+        String effectiveDescription = request.getEffectiveDescription();
+        String targetMarket = request.getTargetMarket();
+        
+        log.info("Effective Title: {}", effectiveTitle);
+        log.info("Effective Description ({} chars): {}", 
+                effectiveDescription.length(),
+                effectiveDescription.length() > 200 ? effectiveDescription.substring(0, 200) + "..." : effectiveDescription);
+        log.info("Target Market: {}", targetMarket);
 
-        // Build prompt
-        String prompt = buildAnalysisPrompt(request);
+        // Build prompt with effective values
+        String prompt = buildAnalysisPrompt(effectiveTitle, effectiveDescription, targetMarket);
+        log.debug("=== PROMPT SENT TO OPENAI ===\n{}", prompt);
+        
         List<ChatMessage> messages = List.of(
                 ChatMessage.builder()
                         .role("system")
@@ -50,21 +70,27 @@ public class IdeaAnalyzerService {
                         .build()
         );
 
-        // Call OpenAI API
-        OpenAIResponse openAIResponse = openAIService
-                .sendChatCompletion(messages, 0.3, 1500)
-                .join();
+        // Call OpenAI API with proper timeout
+        log.info("Calling OpenAI API with timeout of {}s...", TIMEOUT_SECONDS);
+        OpenAIResponse openAIResponse = openAIService.sendChatCompletionWithTimeout(
+                messages, TEMPERATURE, MAX_TOKENS, TIMEOUT_SECONDS);
 
         // Parse response
         String aiResponse = openAIResponse.getChoices().get(0).getMessage().getContent();
+        log.debug("=== RAW OPENAI RESPONSE ===\n{}", aiResponse);
+        
         AnalysisResult analysis = parseAnalysisResponse(aiResponse);
+        log.info("=== PARSED ANALYSIS === Score: {}, Strengths: {}, Weaknesses: {}", 
+                analysis.getScore(), 
+                analysis.getStrengths() != null ? analysis.getStrengths().size() : 0,
+                analysis.getWeaknesses() != null ? analysis.getWeaknesses().size() : 0);
 
         // Save to database
         IdeaAnalysis entity = IdeaAnalysis.builder()
                 .userId(userId)
-                .ideaTitle(request.getTitle())
-                .ideaDescription(request.getDescription())
-                .targetMarket(request.getTargetMarket())
+                .ideaTitle(effectiveTitle)
+                .ideaDescription(effectiveDescription)
+                .targetMarket(targetMarket)
                 .score(analysis.getScore())
                 .strengths(analysis.getStrengths())
                 .weaknesses(analysis.getWeaknesses())
@@ -75,13 +101,15 @@ public class IdeaAnalyzerService {
                 .build();
 
         IdeaAnalysis saved = ideaAnalysisRepository.save(entity);
-
-        log.info("Idea analyzed successfully. Analysis ID: {}, Score: {}", saved.getId(), saved.getScore());
+        
+        long duration = System.currentTimeMillis() - startTime;
+        log.info("=== ANALYSIS COMPLETE === ID: {}, Score: {}, Duration: {}ms", 
+                saved.getId(), saved.getScore(), duration);
 
         return AnalysisResponse.fromEntity(saved);
     }
 
-    private String buildAnalysisPrompt(AnalyzeIdeaRequest request) {
+    private String buildAnalysisPrompt(String title, String description, String targetMarket) {
         return String.format("""
                 Analyze this startup idea and provide a detailed evaluation.
 
@@ -108,9 +136,9 @@ public class IdeaAnalyzerService {
                 - Revenue potential
                 - Target market fit
                 """,
-                request.getTitle(),
-                request.getDescription(),
-                request.getTargetMarket() != null ? request.getTargetMarket() : "General market"
+                title,
+                description,
+                targetMarket != null ? targetMarket : "General market"
         );
     }
 
