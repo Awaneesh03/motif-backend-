@@ -34,8 +34,8 @@ public class IdeaAnalyzerService {
     private final ObjectMapper objectMapper;
     
     // Analysis settings
-    private static final int MAX_TOKENS = 1200;  // Enough for detailed JSON response
-    private static final int TIMEOUT_SECONDS = 60;  // Timeout for analysis
+    private static final int MAX_TOKENS = 2500;  // Increased for comprehensive analysis
+    private static final int TIMEOUT_SECONDS = 90;  // Increased timeout for detailed analysis
     private static final double TEMPERATURE = 0.3;  // Lower = more consistent results
 
     @Transactional
@@ -111,30 +111,38 @@ public class IdeaAnalyzerService {
 
     private String buildAnalysisPrompt(String title, String description, String targetMarket) {
         return String.format("""
-                Analyze this startup idea and provide a detailed evaluation.
+                You are a senior startup analyst and VC partner. Analyze this startup idea deeply and critically.
 
-                **Idea Title:** %s
-                **Description:** %s
-                **Target Market:** %s
+                **Startup Idea Details:**
+                - Title: %s
+                - Problem/Solution Description: %s
+                - Target Market: %s
 
-                Please provide your analysis in the following JSON format (respond ONLY with valid JSON):
+                Analyze using this framework, then provide your response as JSON:
+
+                1. **Problem Clarity**: Who experiences this problem? How painful (1-10)? Current alternatives?
+                2. **Target Customer**: ICP details, early adopters, who will NOT buy
+                3. **Market Analysis**: TAM/SAM/SOM estimates, growth trajectory, trend durability
+                4. **Competition**: Direct/indirect competitors, switching costs, barriers to entry
+                5. **Monetization**: Pricing model options, CAC estimate, LTV logic, path to first revenue
+                6. **Execution Difficulty**: Technical complexity (1-10), operational challenges, regulatory risks
+                7. **Critical Risks**: Market, execution, distribution, and timing risks
+                8. **Validation Signals**: What metrics prove traction? Early PMF indicators?
+                9. **Verdict**: Venture-backable? Bootstrappable? Who should build this?
+
+                Respond ONLY with this JSON format:
 
                 {
-                  "score": <integer between 0-100>,
-                  "strengths": ["strength 1", "strength 2", "strength 3"],
-                  "weaknesses": ["weakness 1", "weakness 2", "weakness 3"],
-                  "recommendations": ["recommendation 1", "recommendation 2", "recommendation 3"],
-                  "marketSize": "<2-3 sentence analysis of market size and opportunity>",
-                  "competition": "<2-3 sentence analysis of competitive landscape>",
-                  "viability": "<2-3 sentence analysis of overall viability>"
+                  "score": <0-100 viability score>,
+                  "strengths": ["specific strength 1", "specific strength 2", "specific strength 3"],
+                  "weaknesses": ["critical weakness 1", "critical weakness 2", "critical weakness 3"],
+                  "recommendations": ["actionable recommendation 1", "actionable recommendation 2", "actionable recommendation 3"],
+                  "marketSize": "<TAM/SAM/SOM analysis with specific estimates and assumptions>",
+                  "competition": "<competitive landscape analysis: direct competitors, indirect substitutes, defensibility>",
+                  "viability": "<honest verdict: venture-backable/bootstrappable, who should build this, key success factors>"
                 }
 
-                Evaluate based on:
-                - Market opportunity and demand
-                - Competitive advantage
-                - Feasibility and scalability
-                - Revenue potential
-                - Target market fit
+                Be analytical, specific, and brutally honest. No generic statements. Make assumptions explicit.
                 """,
                 title,
                 description,
@@ -144,10 +152,17 @@ public class IdeaAnalyzerService {
 
     private String getSystemPrompt() {
         return """
-                You are an expert startup advisor and venture capital analyst with 20+ years of experience.
-                You provide honest, constructive feedback on startup ideas.
-                Always respond with valid JSON format only, no markdown formatting or additional text.
-                Be specific and actionable in your analysis.
+                You are a senior VC partner and startup analyst with 20+ years of experience evaluating 1000+ startups.
+                
+                Your analysis style:
+                - Brutally honest, not motivational
+                - Specific numbers and examples, not vague statements
+                - Clear assumptions stated explicitly
+                - Focus on risks and red flags equally with opportunities
+                - Think like an investor deciding whether to write a check
+                
+                Always respond with valid JSON only. No markdown, no explanations outside JSON.
+                Every strength must be specific to THIS idea. Every weakness must be actionable.
                 """;
     }
 
