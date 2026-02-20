@@ -34,7 +34,7 @@ public class AnalyzeIdeaRequest {
     /**
      * Detailed description - optional if 'idea' is provided
      */
-    @Size(min = 20, max = 1000, message = "Description must be between 20 and 1000 characters")
+    @Size(min = 20, max = 10000, message = "Description must be between 20 and 10000 characters")
     private String description;
 
     /**
