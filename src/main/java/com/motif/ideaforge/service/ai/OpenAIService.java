@@ -334,7 +334,10 @@ public class OpenAIService {
                                 if (chunk.getChoices() != null && !chunk.getChoices().isEmpty()) {
                                     StreamDelta delta = chunk.getChoices().get(0).getDelta();
                                     if (delta != null && delta.getContent() != null) {
-                                        emitter.send(delta.getContent());
+                                        // Send as JSON to preserve whitespace in tokens
+                                        String jsonContent = objectMapper.writeValueAsString(
+                                            java.util.Map.of("content", delta.getContent()));
+                                        emitter.send(jsonContent);
                                     }
                                 }
                             } catch (Exception e) {
