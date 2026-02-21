@@ -33,10 +33,10 @@ public class IdeaAnalyzerService {
     private final IdeaAnalysisRepository ideaAnalysisRepository;
     private final ObjectMapper objectMapper;
     
-    // Analysis settings — keep tokens low for fast responses
-    private static final int MAX_TOKENS = 1000;
+    // Analysis settings
+    private static final int MAX_TOKENS = 1200;
     private static final int TIMEOUT_SECONDS = 45;
-    private static final double TEMPERATURE = 0.3;
+    private static final double TEMPERATURE = 0.2;
 
     // Removed @Transactional to allow returning results even if DB save fails
     public AnalysisResponse analyzeIdea(UUID userId, AnalyzeIdeaRequest request) {
@@ -126,21 +126,45 @@ public class IdeaAnalyzerService {
 
     private String buildAnalysisPrompt(String title, String description, String targetMarket) {
         return String.format("""
-                Analyze this startup idea and respond ONLY with valid JSON — no markdown, no extra text.
+                You are a skeptical VC evaluating whether to invest. Be critical. Do NOT inflate scores.
 
+                Startup Idea:
                 Title: %s
                 Description: %s
                 Target Market: %s
 
-                JSON format (keep each string under 100 words):
+                Score using this weighted framework (be strict, deduct aggressively for weak assumptions):
+                  PS  = Problem Severity           (0–20)
+                  MO  = Market Opportunity         (0–20)
+                  CA  = Competitive Advantage      (0–15)
+                  MF  = Monetization Feasibility   (0–15)
+                  EF  = Execution Feasibility      (0–15)
+                  RL  = Risk Level (high risk = low score) (0–15)
+                  Total = PS + MO + CA + MF + EF + RL
+
+                Scoring guide: weak <50, average 50–70, strong 70–85, exceptional 85+.
+
+                Respond ONLY with this JSON (no markdown, no extra text, keep each string under 40 words):
                 {
-                  "score": <0-100>,
-                  "strengths": ["strength 1", "strength 2", "strength 3"],
-                  "weaknesses": ["weakness 1", "weakness 2", "weakness 3"],
-                  "recommendations": ["action 1", "action 2", "action 3"],
-                  "marketSize": "<TAM estimate with one concrete number>",
-                  "competition": "<key competitors and one differentiator>",
-                  "viability": "<High/Medium/Low Viability — one sentence reason>"
+                  "score": <total 0–100>,
+                  "strengths": [
+                    "PS <X>/20: <one-sentence justification>",
+                    "MO <X>/20: <one-sentence justification>",
+                    "<best remaining category> <X>/15: <one-sentence justification>"
+                  ],
+                  "weaknesses": [
+                    "<worst category> <X>/15: <deduction reason>",
+                    "<2nd worst category> <X>/15: <deduction reason>",
+                    "<3rd weakness> <X>/15: <deduction reason>"
+                  ],
+                  "recommendations": [
+                    "<specific action that adds +5 pts>",
+                    "<specific action that adds +5 pts>",
+                    "<specific action that adds +5 pts>"
+                  ],
+                  "marketSize": "MO <X>/20 — <TAM/SAM with one concrete number and assumption>",
+                  "competition": "CA <X>/15 — <key competitors and what differentiation is missing>",
+                  "viability": "PS=<x>/20 MO=<x>/20 CA=<x>/15 MF=<x>/15 EF=<x>/15 RL=<x>/15 = <total>/100 — <one-sentence verdict>"
                 }
                 """,
                 title,
@@ -150,7 +174,7 @@ public class IdeaAnalyzerService {
     }
 
     private String getSystemPrompt() {
-        return "You are a startup analyst. Be specific and concise. Respond ONLY with valid JSON.";
+        return "You are a skeptical VC analyst. State scores numerically. Respond ONLY with valid JSON.";
     }
 
     private AnalysisResult parseAnalysisResponse(String response) {
