@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 
 @Slf4j
 @Service
@@ -20,46 +19,49 @@ public class PitchGeneratorService {
 
     private final OpenAIService openAIService;
 
+    private static final int MAX_TOKENS = 2000;
+    private static final int TIMEOUT_SECONDS = 60;
+
     public PitchResponse generatePitch(GeneratePitchRequest request) {
         log.info("Generating pitch deck for idea: {}", request.getIdeaName());
 
         String prompt = buildPitchPrompt(request);
-        
+
+        List<ChatMessage> messages = new ArrayList<>();
+        messages.add(ChatMessage.builder()
+            .role("system")
+            .content("You are a pitch deck creator. Return ONLY valid JSON, no markdown.")
+            .build());
+        messages.add(ChatMessage.builder()
+            .role("user")
+            .content(prompt)
+            .build());
+
         try {
-            List<ChatMessage> messages = new ArrayList<>();
-            messages.add(ChatMessage.builder()
-                .role("system")
-                .content("You are an expert pitch deck creator. Generate structured, professional pitch decks.")
-                .build());
-            messages.add(ChatMessage.builder()
-                .role("user")
-                .content(prompt)
-                .build());
-            
-            OpenAIService.OpenAIResponse response = openAIService.sendChatCompletion(messages, 0.7, 4000).get();
-            
+            OpenAIService.OpenAIResponse response = openAIService.sendChatCompletionWithTimeout(
+                messages, 0.7, MAX_TOKENS, TIMEOUT_SECONDS);
+
             if (response.getChoices() != null && !response.getChoices().isEmpty()) {
                 String aiResponse = response.getChoices().get(0).getMessage().getContent();
                 return parsePitchResponse(aiResponse, request);
             }
-        } catch (InterruptedException | ExecutionException e) {
-            log.error("Error generating pitch deck", e);
-            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            log.error("Error generating pitch deck: {}", e.getMessage());
         }
-        
+
         return createDefaultPitch(request);
     }
 
     private String buildPitchPrompt(GeneratePitchRequest request) {
         return String.format(
-            "Generate a 10-slide pitch deck for:\n" +
-            "Idea: %s\nProblem: %s\nSolution: %s\n" +
-            "Audience: %s\nMarket: %s\nUSP: %s\n" +
-            "Return JSON: {slides: [{title, content, bulletPoints}], speakerNotes}",
+            "Generate a 10-slide pitch deck. Be concise — each slide: title (3-5 words), content (1-2 sentences), bulletPoints (2-3 items, max 8 words each).\n\n" +
+            "Idea: %s\nProblem: %s\nSolution: %s\nAudience: %s\nMarket: %s\nUSP: %s\n\n" +
+            "Return ONLY this JSON (no extra text):\n" +
+            "{\"slides\":[{\"title\":\"...\",\"content\":\"...\",\"bulletPoints\":[\"...\",\"...\"]}],\"speakerNotes\":\"<2 sentences>\"}",
             request.getIdeaName(), request.getProblem(), request.getSolution(),
-            request.getAudience() != null ? request.getAudience() : "N/A",
-            request.getMarket() != null ? request.getMarket() : "N/A",
-            request.getUsp() != null ? request.getUsp() : "N/A"
+            request.getAudience() != null ? request.getAudience() : "General",
+            request.getMarket() != null ? request.getMarket() : "Large market",
+            request.getUsp() != null ? request.getUsp() : "Unique solution"
         );
     }
 
