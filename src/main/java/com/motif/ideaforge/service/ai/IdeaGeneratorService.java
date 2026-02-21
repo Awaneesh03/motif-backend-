@@ -25,14 +25,18 @@ public class IdeaGeneratorService {
     private final OpenAIService openAIService;
     private final ObjectMapper objectMapper;
 
+    private static final int MAX_TOKENS = 300;
+    private static final int TIMEOUT_SECONDS = 20;
+
     public IdeaResponse generateIdea(UUID userId, GenerateIdeaRequest request) {
         log.info("Generating startup idea for user: {}", userId);
-        String prompt = "Generate a unique startup idea. Return JSON: {title, description, targetMarket}";
         List<ChatMessage> messages = List.of(
-            ChatMessage.builder().role("system").content("You are a creative startup ideator. Return valid JSON only.").build(),
-            ChatMessage.builder().role("user").content(prompt).build()
+            ChatMessage.builder().role("system").content("You are a startup ideator. Return ONLY valid JSON, no markdown.").build(),
+            ChatMessage.builder().role("user").content(
+                "Generate one unique startup idea. JSON only: {\"title\":\"<10 words max>\",\"description\":\"<2-3 sentences>\",\"targetMarket\":\"<e.g. B2B, SaaS>\"}"
+            ).build()
         );
-        OpenAIResponse resp = openAIService.sendChatCompletion(messages, 0.9, 500).join();
+        OpenAIResponse resp = openAIService.sendChatCompletionWithTimeout(messages, 0.9, MAX_TOKENS, TIMEOUT_SECONDS);
         String content = resp.getChoices().get(0).getMessage().getContent();
         GeneratedIdea idea = parseResponse(content);
         return IdeaResponse.builder().title(idea.getTitle()).description(idea.getDescription()).targetMarket(idea.getTargetMarket()).build();
