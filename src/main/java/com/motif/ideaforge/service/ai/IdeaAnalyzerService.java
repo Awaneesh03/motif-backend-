@@ -33,10 +33,10 @@ public class IdeaAnalyzerService {
     private final IdeaAnalysisRepository ideaAnalysisRepository;
     private final ObjectMapper objectMapper;
     
-    // Analysis settings
-    private static final int MAX_TOKENS = 1200;
+    // Analysis settings — max_tokens raised to fit 5-step structured output
+    private static final int MAX_TOKENS = 1800;
     private static final int TIMEOUT_SECONDS = 45;
-    private static final double TEMPERATURE = 0.2;
+    private static final double TEMPERATURE = 0.5;
 
     // Removed @Transactional to allow returning results even if DB save fails
     public AnalysisResponse analyzeIdea(UUID userId, AnalyzeIdeaRequest request) {
@@ -126,45 +126,127 @@ public class IdeaAnalyzerService {
 
     private String buildAnalysisPrompt(String title, String description, String targetMarket) {
         return String.format("""
-                You are a skeptical VC evaluating whether to invest. Be critical. Do NOT inflate scores.
-
-                Startup Idea:
-                Title: %s
+                ═══════════════════════════════════════
+                IDEA UNDER ANALYSIS
+                ═══════════════════════════════════════
+                Title:       %s
                 Description: %s
                 Target Market: %s
+                ═══════════════════════════════════════
 
-                Score using this weighted framework (be strict, deduct aggressively for weak assumptions):
-                  PS  = Problem Severity           (0–20)
-                  MO  = Market Opportunity         (0–20)
-                  CA  = Competitive Advantage      (0–15)
-                  MF  = Monetization Feasibility   (0–15)
-                  EF  = Execution Feasibility      (0–15)
-                  RL  = Risk Level (high risk = low score) (0–15)
-                  Total = PS + MO + CA + MF + EF + RL
+                You are an investor conducting due diligence on the pitch above.
+                Complete all 7 steps INTERNALLY in order, then output ONE JSON object.
+                Do NOT output the steps. Do NOT output anything outside the JSON.
 
-                Scoring guide: weak <50, average 50–70, strong 70–85, exceptional 85+.
+                ───────────────────────────────────────
+                ABSOLUTE CONSTRAINTS
+                Any violation makes the entire response invalid. Check each before outputting.
+                ───────────────────────────────────────
 
-                Respond ONLY with this JSON (no markdown, no extra text, keep each string under 40 words):
+                C1. LITERAL QUOTATION PROOF
+                    Copy-paste 2–3 exact, word-for-word phrases from the Description into your JSON
+                    (mark them with quotation marks so they are identifiable as direct quotes).
+                    If the description lacks enough detail to quote, write in the relevant field:
+                    "Insufficient detail — missing: [list exactly what is absent]"
+
+                C2. FALSIFIABILITY TEST
+                    Before finalising each sentence, ask: "Would this sentence be factually wrong
+                    if applied to a different startup?" If the answer is NO, the sentence is too
+                    generic. Delete it and rewrite it with a specific anchor — a quoted phrase,
+                    a competitor name, a dollar figure, or a detail unique to this description.
+
+                C3. BANNED PHRASES
+                    Any response containing the following is invalid — rewrite immediately:
+                    "scalable business model", "strong potential", "clear value proposition",
+                    "room for innovation", "proven model", "significant opportunity",
+                    "large addressable market" (unless followed immediately by a specific $ figure),
+                    "product-market fit", "market validation", "customer acquisition", "game-changing",
+                    "innovative solution", "disrupts the market".
+
+                C4. REVENUE MODEL HONESTY
+                    Describe the revenue model using only language present in the description.
+                    If it is not stated, write: "Revenue model not specified — missing: [what is absent]"
+                    Do not invent or assume a monetisation mechanism.
+
+                C5. SCORE CEILING
+                    Average, undifferentiated ideas must score 70 or below.
+                    Score 80 or above ONLY when the description contains explicit evidence of a
+                    proprietary moat, technical barrier, or regulatory advantage — and quote that evidence.
+                    Score 90 or above only for ideas with all five dimensions above 16/20.
+
+                ───────────────────────────────────────
+                7-STEP INTERNAL ANALYSIS (complete in order)
+                ───────────────────────────────────────
+
+                STEP 1 — QUOTED EVIDENCE EXTRACTION
+                Select 2–3 exact phrases from the description. For each phrase:
+                  (a) Copy it verbatim.
+                  (b) State the single most important business implication it carries.
+                  (c) Confirm it would appear only in analysis of this idea, not another.
+
+                STEP 2 — BUSINESS MODEL CLARIFICATION
+                State the revenue model in one sentence, using only language from the description.
+                Apply C4 if model is absent or ambiguous. Do not fill gaps with assumptions.
+
+                STEP 3 — ASSUMPTION FAILURE ANALYSIS
+                List exactly 5 assumptions this idea requires to succeed. For each assumption:
+                  (a) State it precisely — it must be specific enough that it cannot appear on a
+                      generic SaaS startup's assumption list.
+                  (b) State the real-world condition under which it fails, with a concrete example.
+
+                STEP 4 — BIDIRECTIONAL COMPETITOR ANALYSIS
+                Name 2–3 real, specific companies operating in this exact market.
+                For each competitor provide both directions:
+                  THREAT: one specific capability they possess that this idea currently lacks.
+                  EDGE:   one specific gap in their offering this idea could realistically exploit.
+
+                STEP 5 — UNIQUE FAILURE SCENARIO
+                Identify one failure mode that satisfies all three conditions:
+                  (a) Originates directly from a specific detail stated in the description.
+                  (b) Would not exist for a standard SaaS subscription company.
+                  (c) Would cause this idea to fail even with a competent, fully funded team.
+
+                STEP 6 — POINT DEDUCTION LEDGER
+                Score each dimension starting at 20. Subtract points line-by-line.
+                Every deduction must reference specific text from the description.
+                Show the net score for each category.
+
+                  Problem Severity     start=20  subtract: [reason tied to description] = net
+                  Market Size Realism  start=20  subtract: [reason tied to description] = net
+                  Defensibility        start=20  subtract: [reason tied to description] = net
+                  Monetization         start=20  subtract: [reason tied to description] = net
+                  Execution Complexity start=20  subtract: [reason tied to description] = net
+                  (Execution = 20 means trivial MVP; 0 means years of R&D required.)
+
+                STEP 7 — SELF-CHECK
+                Re-read every planned sentence. For each one that would survive a title swap
+                to a different startup, replace it with a sentence that contains a specific anchor
+                — quoted text, competitor name, number, or detail unique to this description.
+                No sentence passes Step 7 unless it is falsifiable for this specific idea.
+
+                ───────────────────────────────────────
+                OUTPUT — exact JSON only, no markdown, no text outside the braces
+                ───────────────────────────────────────
                 {
-                  "score": <total 0–100>,
+                  "score": <sum of the 5 Step-6 net scores, max 100>,
                   "strengths": [
-                    "PS <X>/20: <one-sentence justification>",
-                    "MO <X>/20: <one-sentence justification>",
-                    "<best remaining category> <X>/15: <one-sentence justification>"
+                    "Problem Severity <net>/20: \\"<exact quoted phrase>\\" — <implication specific to this idea>",
+                    "Market Size <net>/20: <idea-specific reasoning referencing the stated target market>",
+                    "<best remaining category> <net>/20: <idea-specific reasoning with a specific anchor>"
                   ],
                   "weaknesses": [
-                    "<worst category> <X>/15: <deduction reason>",
-                    "<2nd worst category> <X>/15: <deduction reason>",
-                    "<3rd weakness> <X>/15: <deduction reason>"
+                    "<Step-3 assumption most likely to fail — idea-specific, includes the failure condition>",
+                    "<Step-3 second-most-critical assumption — idea-specific, includes the failure condition>",
+                    "<Step-5 unique failure scenario — one sentence, would not apply to generic SaaS>"
                   ],
                   "recommendations": [
-                    "<specific action that adds +5 pts>",
-                    "<specific action that adds +5 pts>",
-                    "<specific action that adds +5 pts>"
+                    "<action targeting the lowest Step-6 net score — references a specific detail of this idea>",
+                    "<action targeting the second-lowest Step-6 net score — references a specific detail>",
+                    "<action that directly neutralises the Step-5 failure scenario>"
                   ],
-                  "marketSize": "MO <X>/20 — <TAM/SAM with one concrete number and assumption>",
-                  "competition": "CA <X>/15 — <key competitors and what differentiation is missing>",
-                  "viability": "PS=<x>/20 MO=<x>/20 CA=<x>/15 MF=<x>/15 EF=<x>/15 RL=<x>/15 = <total>/100 — <one-sentence verdict>"
+                  "marketSize": "Market Size <net>/20 — $<single specific figure, not a range> TAM because <domain-specific reasoning tied to description>",
+                  "competition": "<Competitor 1> [THREAT: <their edge over this idea>] [EDGE: <gap this idea fills>]. <Competitor 2> [THREAT: <their edge>] [EDGE: <gap this idea fills>]",
+                  "viability": "Problem=<x>/20 Market=<x>/20 Defense=<x>/20 Monetization=<x>/20 Execution=<x>/20 = <total>/100 — <verdict containing at least one quoted phrase that makes it specific to this idea only>"
                 }
                 """,
                 title,
@@ -174,7 +256,16 @@ public class IdeaAnalyzerService {
     }
 
     private String getSystemPrompt() {
-        return "You are a skeptical VC analyst. State scores numerically. Respond ONLY with valid JSON.";
+        return """
+                You are a skeptical VC analyst conducting real due diligence on a specific startup pitch.
+                Output rules:
+                (1) Every sentence must be falsifiable: it must contain a specific name, number, or
+                    quoted phrase that would be factually wrong if applied to a different startup.
+                (2) If you draft a generic sentence, delete it and replace it with a specific anchor
+                    from the idea description before outputting.
+                (3) Respond ONLY with valid JSON. No markdown. No text outside the JSON braces.
+                (4) Average ideas score at or below 70. 80+ requires quoted evidence of a moat.
+                (5) Never invent revenue models, market sizes, or features not stated in the pitch.""";
     }
 
     private AnalysisResult parseAnalysisResponse(String response) {
