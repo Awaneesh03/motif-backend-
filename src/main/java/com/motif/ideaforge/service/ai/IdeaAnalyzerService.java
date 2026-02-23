@@ -33,8 +33,8 @@ public class IdeaAnalyzerService {
     private final IdeaAnalysisRepository ideaAnalysisRepository;
     private final ObjectMapper objectMapper;
     
-    // Analysis settings — max_tokens raised to fit 5-step structured output
-    private static final int MAX_TOKENS = 1800;
+    // Analysis settings — max_tokens raised to fit the full 7-step JSON output
+    private static final int MAX_TOKENS = 3000;
     private static final int TIMEOUT_SECONDS = 45;
     private static final double TEMPERATURE = 0.5;
 
@@ -270,24 +270,39 @@ public class IdeaAnalyzerService {
 
     private AnalysisResult parseAnalysisResponse(String response) {
         try {
-            // Remove markdown code blocks if present
-            String jsonString = response.trim();
-            if (jsonString.startsWith("```json")) {
-                jsonString = jsonString.substring(7);
-            }
-            if (jsonString.startsWith("```")) {
-                jsonString = jsonString.substring(3);
-            }
-            if (jsonString.endsWith("```")) {
-                jsonString = jsonString.substring(0, jsonString.length() - 3);
-            }
-            jsonString = jsonString.trim();
-
+            String jsonString = extractJson(response);
             return objectMapper.readValue(jsonString, AnalysisResult.class);
         } catch (Exception e) {
             log.error("Failed to parse analysis response: {}", response, e);
             throw new AIServiceException("Failed to parse AI analysis response");
         }
+    }
+
+    /**
+     * Robustly extract the outermost JSON object from an AI response.
+     * Handles: plain JSON, markdown-fenced JSON, and JSON with surrounding text.
+     */
+    private String extractJson(String raw) {
+        String s = raw.trim();
+
+        // Strip markdown code fences (```json ... ``` or ``` ... ```)
+        if (s.startsWith("```")) {
+            int newline = s.indexOf('\n');
+            s = (newline != -1) ? s.substring(newline + 1) : s.substring(3);
+        }
+        if (s.endsWith("```")) {
+            s = s.substring(0, s.lastIndexOf("```"));
+        }
+        s = s.trim();
+
+        // Find the outermost {...} to tolerate any text before/after the object
+        int start = s.indexOf('{');
+        int end = s.lastIndexOf('}');
+        if (start != -1 && end != -1 && end > start) {
+            s = s.substring(start, end + 1);
+        }
+
+        return s.trim();
     }
 
     @Data
