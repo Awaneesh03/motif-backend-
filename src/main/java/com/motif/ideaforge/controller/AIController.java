@@ -6,6 +6,7 @@ import com.motif.ideaforge.model.dto.request.GenerateIdeaRequest;
 import com.motif.ideaforge.model.dto.request.EvaluateCaseRequest;
 import com.motif.ideaforge.model.dto.request.GeneratePitchRequest;
 import com.motif.ideaforge.model.dto.request.ImproveDescriptionRequest;
+import com.motif.ideaforge.model.dto.request.MentorChatRequest;
 import com.motif.ideaforge.model.dto.response.AnalysisResponse;
 import com.motif.ideaforge.model.dto.response.ChatResponse;
 import com.motif.ideaforge.model.dto.response.IdeaResponse;
@@ -16,6 +17,7 @@ import com.motif.ideaforge.service.ai.ChatbotService;
 import com.motif.ideaforge.service.ai.IdeaAnalyzerService;
 import com.motif.ideaforge.service.ai.IdeaGeneratorService;
 import com.motif.ideaforge.service.ai.CaseEvaluatorService;
+import com.motif.ideaforge.service.ai.MentorChatService;
 import com.motif.ideaforge.service.PitchGeneratorService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -39,6 +41,7 @@ public class AIController {
 
     private final IdeaAnalyzerService ideaAnalyzerService;
     private final ChatbotService chatbotService;
+    private final MentorChatService mentorChatService;
     private final IdeaGeneratorService ideaGeneratorService;
     private final CaseEvaluatorService caseEvaluatorService;
     private final PitchGeneratorService pitchGeneratorService;
@@ -135,6 +138,38 @@ public class AIController {
         PitchResponse response = pitchGeneratorService.generatePitch(request);
         return ResponseEntity.ok(response);
     }
+
+    // ── Mentor Chat ───────────────────────────────────────────────────────────
+
+    /**
+     * Context-aware mentor chat (blocking).
+     * Fetches the user's stored idea analysis, injects it into the system prompt,
+     * and answers using ONLY that data as the source of truth.
+     */
+    @PostMapping("/mentor-chat")
+    @Operation(summary = "Context-aware startup mentor chat")
+    public ResponseEntity<ChatResponse> mentorChat(
+            @Valid @RequestBody MentorChatRequest request,
+            @AuthenticationPrincipal UserPrincipal user) {
+        log.info("MentorChat for user: {}", user.getId());
+        ChatResponse response = mentorChatService.mentorChat(user.getId(), request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Context-aware mentor chat — streaming (SSE).
+     * Same as /mentor-chat but tokens are pushed as Server-Sent Events.
+     */
+    @PostMapping(value = "/mentor-chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(summary = "Context-aware startup mentor chat (SSE streaming)")
+    public SseEmitter mentorChatStream(
+            @Valid @RequestBody MentorChatRequest request,
+            @AuthenticationPrincipal UserPrincipal user) {
+        log.info("MentorChat/stream for user: {}", user.getId());
+        return mentorChatService.mentorChatStream(user.getId(), request);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     @PostMapping("/improve-description")
     @Operation(summary = "Improve a startup description")

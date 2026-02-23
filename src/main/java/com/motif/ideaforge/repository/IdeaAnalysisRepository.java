@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -14,6 +15,9 @@ import java.util.UUID;
 public interface IdeaAnalysisRepository extends JpaRepository<IdeaAnalysis, UUID> {
 
     List<IdeaAnalysis> findByUserIdOrderByCreatedAtDesc(UUID userId);
+
+    /** Returns the most recent analysis for the user — used by MentorChatService. */
+    Optional<IdeaAnalysis> findFirstByUserIdOrderByCreatedAtDesc(UUID userId);
 
     long countByUserId(UUID userId);
 }

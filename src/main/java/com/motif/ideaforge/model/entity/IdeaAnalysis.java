@@ -12,6 +12,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -64,6 +65,15 @@ public class IdeaAnalysis {
 
     @Column(columnDefinition = "TEXT")
     private String viability;
+
+    /**
+     * Enriched mentor context generated on first mentor-chat request.
+     * Stored as JSONB so we only generate it once (lazy, cached).
+     * Requires: ALTER TABLE idea_analyses ADD COLUMN IF NOT EXISTS mentor_context JSONB;
+     */
+    @Type(JsonType.class)
+    @Column(name = "mentor_context", columnDefinition = "jsonb")
+    private Map<String, Object> mentorContext;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @CreationTimestamp
