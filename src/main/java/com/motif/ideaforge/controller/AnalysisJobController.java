@@ -4,6 +4,7 @@ import com.motif.ideaforge.exception.ValidationException;
 import com.motif.ideaforge.model.dto.request.AnalyzeIdeaRequest;
 import com.motif.ideaforge.model.dto.response.JobStatusResponse;
 import com.motif.ideaforge.model.dto.response.StartAnalysisResponse;
+import com.motif.ideaforge.model.dto.response.SubmitReviewResponse;
 import com.motif.ideaforge.security.UserPrincipal;
 import com.motif.ideaforge.service.AnalysisJobService;
 import com.motif.ideaforge.service.ai.IdeaAnalyzerService;
@@ -85,20 +86,19 @@ public class AnalysisJobController {
 
     /**
      * Submit a saved analysis for admin review.
-     * Updates status from "draft" → "pending_review" for this specific idea only.
-     * Returns 200 with { status, ideaId }.
+     * Valid transition: draft → pending_review.
+     * Returns 200 with { ideaId, status, submittedAt }.
+     * Returns 404 if the idea is not found or does not belong to the caller.
+     * Returns 400 if the current status does not allow submission.
      */
     @PatchMapping("/{ideaId}/submit")
     @Operation(summary = "Submit a specific analyzed idea for admin review")
-    public ResponseEntity<Map<String, String>> submitForReview(
+    public ResponseEntity<SubmitReviewResponse> submitForReview(
             @PathVariable UUID ideaId,
             @AuthenticationPrincipal UserPrincipal user) {
 
         log.info("Submit for review — ideaId: {}, user: {}", ideaId, user.getId());
-        ideaAnalyzerService.submitForReview(ideaId, user.getId());
-        return ResponseEntity.ok(Map.of(
-                "status", "pending_review",
-                "ideaId", ideaId.toString()
-        ));
+        SubmitReviewResponse response = ideaAnalyzerService.submitForReview(ideaId, user.getId());
+        return ResponseEntity.ok(response);
     }
 }

@@ -25,5 +25,12 @@ public interface IdeaAnalysisRepository extends JpaRepository<IdeaAnalysis, UUID
      */
     Optional<IdeaAnalysis> findByUserIdAndIdeaTitle(UUID userId, String ideaTitle);
 
+    /**
+     * Ownership-safe lookup used by submit-for-review.
+     * Returns empty if the idea doesn't exist OR belongs to a different user —
+     * both cases surface as 404 to avoid leaking existence of other users' ideas.
+     */
+    Optional<IdeaAnalysis> findByIdAndUserId(UUID id, UUID userId);
+
     long countByUserId(UUID userId);
 }

@@ -2,8 +2,11 @@ package com.motif.ideaforge.service.ai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.motif.ideaforge.exception.AIServiceException;
+import com.motif.ideaforge.exception.InvalidStateException;
+import com.motif.ideaforge.exception.ResourceNotFoundException;
 import com.motif.ideaforge.model.dto.request.AnalyzeIdeaRequest;
 import com.motif.ideaforge.model.dto.response.AnalysisResponse;
+import com.motif.ideaforge.model.dto.response.SubmitReviewResponse;
 import com.motif.ideaforge.model.entity.IdeaAnalysis;
 import com.motif.ideaforge.repository.IdeaAnalysisRepository;
 import com.motif.ideaforge.service.ai.OpenAIService.ChatMessage;
@@ -17,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -168,20 +172,49 @@ public class IdeaAnalyzerService {
 
     /**
      * Mark a saved analysis as "pending_review" so an admin can approve it for VCs.
-     * Only the owner of the idea may submit it.
+     *
+     * <p>Security: {@code findByIdAndUserId} returns empty if the idea doesn't exist
+     * OR belongs to a different user — both surface as 404 to avoid leaking the
+     * existence of other users' ideas.
+     *
+     * <p>Valid transition: {@code draft → pending_review}.
+     * All other source states are rejected with 400.
+     *
+     * @throws ResourceNotFoundException if the idea is not found or doesn't belong to this user
+     * @throws InvalidStateException     if the current status does not permit submission
      */
     @Transactional
-    public void submitForReview(UUID ideaId, UUID userId) {
-        IdeaAnalysis entity = ideaAnalysisRepository.findById(ideaId)
-                .orElseThrow(() -> new RuntimeException("Idea not found: " + ideaId));
+    public SubmitReviewResponse submitForReview(UUID ideaId, UUID userId) {
+        IdeaAnalysis entity = ideaAnalysisRepository.findByIdAndUserId(ideaId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Idea not found: " + ideaId));
 
-        if (!entity.getUserId().equals(userId)) {
-            throw new SecurityException("Unauthorized: cannot modify another user's idea");
+        String current = entity.getStatus() != null ? entity.getStatus() : "draft";
+
+        switch (current) {
+            case "pending_review" ->
+                throw new InvalidStateException("Idea is already submitted for review.");
+            case "approved_for_vc" ->
+                throw new InvalidStateException(
+                        "Idea is already approved for VC funding and cannot be re-submitted.");
+            case "rejected" ->
+                throw new InvalidStateException(
+                        "Idea has been rejected. Please contact support to appeal.");
+            case "draft" -> { /* valid — proceed */ }
+            default ->
+                throw new InvalidStateException(
+                        "Cannot submit idea with status '" + current + "'.");
         }
 
         entity.setStatus("pending_review");
         ideaAnalysisRepository.save(entity);
         log.info("Idea {} submitted for review by user {}", ideaId, userId);
+
+        return SubmitReviewResponse.builder()
+                .ideaId(ideaId.toString())
+                .status("pending_review")
+                .submittedAt(Instant.now())
+                .build();
     }
 
     private String buildAnalysisPrompt(String title, String description, String targetMarket) {
