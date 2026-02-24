@@ -10,7 +10,11 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Response DTO for idea analysis
+ * Response DTO for idea analysis.
+ *
+ * <p>Includes both legacy string fields (for Supabase cache compat) and new
+ * structured fields (competitors, market, confidenceScore) populated from
+ * fresh AI analyses. The frontend always prefers the structured fields when present.
  */
 @Data
 @Builder
@@ -23,11 +27,33 @@ public class AnalysisResponse {
     private List<String> strengths;
     private List<String> weaknesses;
     private List<String> recommendations;
-    private String marketSize;
+
+    // ── Legacy string fields (Supabase cache read / old format) ───────────────
+    /** Raw competition string — populated for legacy cache reads. Null for fresh AI results. */
     private String competition;
+    /** Raw market-size string — populated for legacy cache reads. Null for fresh AI results. */
+    private String marketSize;
     private String viability;
+
+    // ── Structured fields (fresh AI analyses) ────────────────────────────────
+    /** Structured competitor list — 2–4 named competitors with threat/opportunity detail. */
+    private List<CompetitorDto> competitors;
+    /** 2–3 actionable strategic advantages tied to the idea description. */
+    private String competitiveAdvantage;
+    /** Structured market-size breakdown with TAM / SAM / SOM estimates. */
+    private MarketSizeDto market;
+    /**
+     * AI confidence in the analysis quality, 0–100.
+     * 100 = full business detail provided; 0 = idea too vague to analyse.
+     */
+    private Integer confidenceScore;
+
     private Instant timestamp;
 
+    /**
+     * Build a response from a cached Supabase entity (legacy string fields).
+     * New structured fields will be null — the frontend falls back to the legacy bridge.
+     */
     public static AnalysisResponse fromEntity(IdeaAnalysis entity) {
         return AnalysisResponse.builder()
                 .analysisId(entity.getId().toString())
