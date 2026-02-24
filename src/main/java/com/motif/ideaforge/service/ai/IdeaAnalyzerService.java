@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -85,33 +86,53 @@ public class IdeaAnalyzerService {
                 analysis.getStrengths() != null ? analysis.getStrengths().size() : 0,
                 analysis.getWeaknesses() != null ? analysis.getWeaknesses().size() : 0);
 
-        // Try to save to database (optional - don't fail if DB is unavailable)
-        IdeaAnalysis entity = IdeaAnalysis.builder()
-                .userId(userId)
-                .ideaTitle(effectiveTitle)
-                .ideaDescription(effectiveDescription)
-                .targetMarket(targetMarket)
-                .score(analysis.getScore())
-                .strengths(analysis.getStrengths())
-                .weaknesses(analysis.getWeaknesses())
-                .recommendations(analysis.getRecommendations())
-                .marketSize(analysis.getMarketSize())
-                .competition(analysis.getCompetition())
-                .viability(analysis.getViability())
-                .build();
-
+        // Upsert: update the existing row for this user+title, or insert a new one.
+        // This prevents duplicate rows when the same idea is analyzed multiple times.
         try {
+            Optional<IdeaAnalysis> existing = ideaAnalysisRepository.findByUserIdAndIdeaTitle(userId, effectiveTitle);
+            IdeaAnalysis entity;
+            if (existing.isPresent()) {
+                // UPDATE — overwrite analysis fields, keep the same row (and its id/status)
+                entity = existing.get();
+                entity.setIdeaDescription(effectiveDescription);
+                entity.setTargetMarket(targetMarket);
+                entity.setScore(analysis.getScore());
+                entity.setStrengths(analysis.getStrengths());
+                entity.setWeaknesses(analysis.getWeaknesses());
+                entity.setRecommendations(analysis.getRecommendations());
+                entity.setMarketSize(analysis.getMarketSize());
+                entity.setCompetition(analysis.getCompetition());
+                entity.setViability(analysis.getViability());
+                log.info("Updating existing analysis row for title: '{}'", effectiveTitle);
+            } else {
+                // INSERT — first time this user analyzes this idea
+                entity = IdeaAnalysis.builder()
+                        .userId(userId)
+                        .ideaTitle(effectiveTitle)
+                        .ideaDescription(effectiveDescription)
+                        .targetMarket(targetMarket)
+                        .score(analysis.getScore())
+                        .strengths(analysis.getStrengths())
+                        .weaknesses(analysis.getWeaknesses())
+                        .recommendations(analysis.getRecommendations())
+                        .marketSize(analysis.getMarketSize())
+                        .competition(analysis.getCompetition())
+                        .viability(analysis.getViability())
+                        .build();
+                log.info("Inserting new analysis row for title: '{}'", effectiveTitle);
+            }
+
             IdeaAnalysis saved = ideaAnalysisRepository.save(entity);
             long duration = System.currentTimeMillis() - startTime;
-            log.info("=== ANALYSIS COMPLETE === ID: {}, Score: {}, Duration: {}ms", 
+            log.info("=== ANALYSIS COMPLETE === ID: {}, Score: {}, Duration: {}ms",
                     saved.getId(), saved.getScore(), duration);
             return AnalysisResponse.fromEntity(saved);
+
         } catch (Exception dbException) {
             log.warn("Failed to save analysis to database, returning result anyway: {}", dbException.getMessage());
             long duration = System.currentTimeMillis() - startTime;
-            log.info("=== ANALYSIS COMPLETE (not saved) === Score: {}, Duration: {}ms", 
+            log.info("=== ANALYSIS COMPLETE (not saved) === Score: {}, Duration: {}ms",
                     analysis.getScore(), duration);
-            // Return the analysis result even if DB save failed
             return AnalysisResponse.builder()
                     .score(analysis.getScore())
                     .strengths(analysis.getStrengths())
@@ -122,6 +143,24 @@ public class IdeaAnalyzerService {
                     .viability(analysis.getViability())
                     .build();
         }
+    }
+
+    /**
+     * Mark a saved analysis as "pending_review" so an admin can approve it for VCs.
+     * Only the owner of the idea may submit it.
+     */
+    @Transactional
+    public void submitForReview(UUID ideaId, UUID userId) {
+        IdeaAnalysis entity = ideaAnalysisRepository.findById(ideaId)
+                .orElseThrow(() -> new RuntimeException("Idea not found: " + ideaId));
+
+        if (!entity.getUserId().equals(userId)) {
+            throw new SecurityException("Unauthorized: cannot modify another user's idea");
+        }
+
+        entity.setStatus("pending_review");
+        ideaAnalysisRepository.save(entity);
+        log.info("Idea {} submitted for review by user {}", ideaId, userId);
     }
 
     private String buildAnalysisPrompt(String title, String description, String targetMarket) {

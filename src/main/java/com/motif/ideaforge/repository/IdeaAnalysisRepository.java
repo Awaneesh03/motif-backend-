@@ -19,5 +19,11 @@ public interface IdeaAnalysisRepository extends JpaRepository<IdeaAnalysis, UUID
     /** Returns the most recent analysis for the user — used by MentorChatService. */
     Optional<IdeaAnalysis> findFirstByUserIdOrderByCreatedAtDesc(UUID userId);
 
+    /**
+     * Upsert check — find an existing analysis for this user + title so we can
+     * UPDATE it instead of inserting a duplicate row.
+     */
+    Optional<IdeaAnalysis> findByUserIdAndIdeaTitle(UUID userId, String ideaTitle);
+
     long countByUserId(UUID userId);
 }

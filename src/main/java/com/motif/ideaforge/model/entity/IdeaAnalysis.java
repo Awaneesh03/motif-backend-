@@ -67,6 +67,15 @@ public class IdeaAnalysis {
     private String viability;
 
     /**
+     * Submission status for VC review pipeline.
+     * Values: "draft" | "pending_review" | "approved_for_vc" | "rejected"
+     * Requires: ALTER TABLE idea_analyses ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT 'draft';
+     */
+    @Column(name = "status", nullable = false, length = 50)
+    @Builder.Default
+    private String status = "draft";
+
+    /**
      * Enriched mentor context generated on first mentor-chat request.
      * Stored as JSONB so we only generate it once (lazy, cached).
      * Requires: ALTER TABLE idea_analyses ADD COLUMN IF NOT EXISTS mentor_context JSONB;

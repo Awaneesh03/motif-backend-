@@ -6,6 +6,7 @@ import com.motif.ideaforge.model.dto.response.JobStatusResponse;
 import com.motif.ideaforge.model.dto.response.StartAnalysisResponse;
 import com.motif.ideaforge.security.UserPrincipal;
 import com.motif.ideaforge.service.AnalysisJobService;
+import com.motif.ideaforge.service.ai.IdeaAnalyzerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Job-based async analysis endpoints.
@@ -38,6 +40,7 @@ import java.util.Map;
 public class AnalysisJobController {
 
     private final AnalysisJobService analysisJobService;
+    private final IdeaAnalyzerService ideaAnalyzerService;
 
     /**
      * Start an async analysis job.
@@ -78,5 +81,24 @@ public class AnalysisJobController {
         log.debug("Status poll — job: {}, user: {}", jobId, user.getId());
         JobStatusResponse response = analysisJobService.getJobStatus(jobId, user.getId());
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Submit a saved analysis for admin review.
+     * Updates status from "draft" → "pending_review" for this specific idea only.
+     * Returns 200 with { status, ideaId }.
+     */
+    @PatchMapping("/{ideaId}/submit")
+    @Operation(summary = "Submit a specific analyzed idea for admin review")
+    public ResponseEntity<Map<String, String>> submitForReview(
+            @PathVariable UUID ideaId,
+            @AuthenticationPrincipal UserPrincipal user) {
+
+        log.info("Submit for review — ideaId: {}, user: {}", ideaId, user.getId());
+        ideaAnalyzerService.submitForReview(ideaId, user.getId());
+        return ResponseEntity.ok(Map.of(
+                "status", "pending_review",
+                "ideaId", ideaId.toString()
+        ));
     }
 }
