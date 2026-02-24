@@ -83,12 +83,59 @@ public class OpenAIService {
     }
 
     /**
+     * Like {@link #sendChatCompletionWithTimeout} but forces JSON mode
+     * ({@code response_format: {type: json_object}}).
+     * Use this for every call that requires a strict JSON response to eliminate
+     * the need to strip markdown fences or handle prose-wrapped JSON.
+     * The prompt MUST mention "JSON" (already enforced by the system prompt).
+     */
+    public OpenAIResponse sendJsonChatCompletionWithTimeout(
+            List<ChatMessage> messages,
+            Double temperature,
+            Integer maxTokens,
+            Integer timeoutSeconds) {
+
+        int timeout = timeoutSeconds != null ? timeoutSeconds : 90;
+        java.util.Map<String, String> jsonFormat = java.util.Map.of("type", "json_object");
+
+        try {
+            return sendChatCompletionWithFormat(messages, temperature, maxTokens, jsonFormat)
+                    .get(timeout, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            log.error("OpenAI JSON API call timed out after {} seconds", timeout);
+            throw new AIServiceException("AI service took too long to respond. Please try again.");
+        } catch (java.util.concurrent.ExecutionException e) {
+            Throwable cause = e.getCause();
+            log.error("OpenAI JSON API call failed: {}", cause != null ? cause.getMessage() : e.getMessage(), cause);
+            if (cause instanceof AIServiceException) {
+                throw (AIServiceException) cause;
+            }
+            throw new AIServiceException("AI service error: " + (cause != null ? cause.getMessage() : e.getMessage()));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AIServiceException("AI service call was interrupted");
+        }
+    }
+
+    /**
      * Send chat completion request to OpenAI API
      */
     public CompletableFuture<OpenAIResponse> sendChatCompletion(
             List<ChatMessage> messages,
             Double temperature,
             Integer maxTokens) {
+        return sendChatCompletionWithFormat(messages, temperature, maxTokens, null);
+    }
+
+    /**
+     * Internal: sends a chat completion with an optional responseFormat map.
+     * All public methods delegate here.
+     */
+    private CompletableFuture<OpenAIResponse> sendChatCompletionWithFormat(
+            List<ChatMessage> messages,
+            Double temperature,
+            Integer maxTokens,
+            java.util.Map<String, String> responseFormat) {
 
         return CompletableFuture.supplyAsync(() -> {
             long startTime = System.currentTimeMillis();
@@ -98,6 +145,7 @@ public class OpenAIService {
                         .messages(messages)
                         .temperature(temperature != null ? temperature : 0.7)
                         .maxTokens(maxTokens != null ? maxTokens : 1000)
+                        .responseFormat(responseFormat)
                         .build();
 
                 String requestBody = objectMapper.writeValueAsString(request);
@@ -177,6 +225,16 @@ public class OpenAIService {
 
         @JsonInclude(JsonInclude.Include.NON_NULL)
         private Boolean stream;
+
+        /**
+         * When set to {"type":"json_object"} OpenAI guarantees the response is
+         * valid JSON (no markdown fences, no prose). Only supported by gpt-4o and
+         * gpt-4o-mini. The system or user prompt MUST also mention "JSON" for this
+         * to take effect (already done in IdeaAnalyzerService system prompt).
+         */
+        @JsonProperty("response_format")
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private java.util.Map<String, String> responseFormat;
     }
 
     @Data

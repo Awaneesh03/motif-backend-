@@ -71,20 +71,41 @@ public class IdeaAnalyzerService {
                         .build()
         );
 
-        // Call OpenAI API with proper timeout
+        // Call OpenAI API in JSON mode (response_format: json_object) + with timeout
         log.info("Calling OpenAI API with timeout of {}s...", TIMEOUT_SECONDS);
-        OpenAIResponse openAIResponse = openAIService.sendChatCompletionWithTimeout(
+        OpenAIResponse openAIResponse = openAIService.sendJsonChatCompletionWithTimeout(
                 messages, TEMPERATURE, MAX_TOKENS, TIMEOUT_SECONDS);
 
+        // Guard: choices list must be non-null and non-empty
+        if (openAIResponse.getChoices() == null || openAIResponse.getChoices().isEmpty()) {
+            throw new AIServiceException("AI service returned no response choices");
+        }
+        OpenAIService.Message msg = openAIResponse.getChoices().get(0).getMessage();
+        if (msg == null || msg.getContent() == null || msg.getContent().isBlank()) {
+            throw new AIServiceException("AI service returned empty response content");
+        }
+
         // Parse response
-        String aiResponse = openAIResponse.getChoices().get(0).getMessage().getContent();
+        String aiResponse = msg.getContent();
         log.debug("=== RAW OPENAI RESPONSE ===\n{}", aiResponse);
-        
+
         AnalysisResult analysis = parseAnalysisResponse(aiResponse);
-        log.info("=== PARSED ANALYSIS === Score: {}, Strengths: {}, Weaknesses: {}", 
-                analysis.getScore(), 
-                analysis.getStrengths() != null ? analysis.getStrengths().size() : 0,
-                analysis.getWeaknesses() != null ? analysis.getWeaknesses().size() : 0);
+
+        // Validate: score must be present and within [0, 100]
+        if (analysis.getScore() == null) {
+            throw new AIServiceException("AI returned analysis without a score field");
+        }
+        analysis.setScore(Math.max(0, Math.min(100, analysis.getScore())));
+
+        // Default null list fields to prevent DB constraint violations
+        if (analysis.getStrengths() == null)     analysis.setStrengths(List.of());
+        if (analysis.getWeaknesses() == null)    analysis.setWeaknesses(List.of());
+        if (analysis.getRecommendations() == null) analysis.setRecommendations(List.of());
+
+        log.info("=== PARSED ANALYSIS === Score: {}, Strengths: {}, Weaknesses: {}",
+                analysis.getScore(),
+                analysis.getStrengths().size(),
+                analysis.getWeaknesses().size());
 
         // Upsert: update the existing row for this user+title, or insert a new one.
         // This prevents duplicate rows when the same idea is analyzed multiple times.

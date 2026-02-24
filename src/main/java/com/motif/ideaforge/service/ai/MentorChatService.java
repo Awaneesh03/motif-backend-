@@ -2,6 +2,7 @@ package com.motif.ideaforge.service.ai;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.motif.ideaforge.exception.AIServiceException;
 import com.motif.ideaforge.model.dto.request.MentorChatRequest;
 import com.motif.ideaforge.model.dto.response.ChatResponse;
 import com.motif.ideaforge.model.entity.IdeaAnalysis;
@@ -76,7 +77,14 @@ public class MentorChatService {
         OpenAIResponse openAIResponse = openAIService.sendChatCompletionWithTimeout(
                 messages, TEMPERATURE, MAX_TOKENS, TIMEOUT_SECONDS);
 
-        String reply = openAIResponse.getChoices().get(0).getMessage().getContent();
+        if (openAIResponse.getChoices() == null || openAIResponse.getChoices().isEmpty()) {
+            throw new AIServiceException("Mentor: AI returned no response choices");
+        }
+        OpenAIService.Message mentorMsg = openAIResponse.getChoices().get(0).getMessage();
+        if (mentorMsg == null || mentorMsg.getContent() == null) {
+            throw new AIServiceException("Mentor: AI returned null content");
+        }
+        String reply = mentorMsg.getContent();
         log.info("[MentorChat] OK — {} chars", reply.length());
 
         return ChatResponse.builder()
@@ -273,11 +281,13 @@ public class MentorChatService {
                 .content(buildSystemPrompt(analysis, ctx))
                 .build());
 
-        // 2. Conversation history — cap to last MAX_HISTORY_ITEMS to control token spend
+        // 2. Conversation history — cap to last MAX_HISTORY_ITEMS and validate each entry
         if (request.getHistory() != null && !request.getHistory().isEmpty()) {
             int start = Math.max(0, request.getHistory().size() - MAX_HISTORY_ITEMS);
-            request.getHistory().subList(start, request.getHistory().size()).forEach(h ->
-                    messages.add(ChatMessage.builder()
+            request.getHistory().subList(start, request.getHistory().size()).stream()
+                    .filter(h -> ("user".equals(h.getRole()) || "assistant".equals(h.getRole()))
+                              && h.getContent() != null && !h.getContent().isBlank())
+                    .forEach(h -> messages.add(ChatMessage.builder()
                             .role(h.getRole())
                             .content(h.getContent())
                             .build()));
