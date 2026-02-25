@@ -93,22 +93,53 @@ public class IdeaAnalyzerService {
                 ChatMessage.builder().role("user").content(prompt).build()
         );
 
-        log.info("Calling OpenAI API with timeout of {}s...", TIMEOUT_SECONDS);
-        OpenAIResponse openAIResponse = openAIService.sendJsonChatCompletionWithTimeout(
-                messages, TEMPERATURE, MAX_TOKENS, TIMEOUT_SECONDS);
+        // ── OpenAI call with up to 2 attempts ────────────────────────────────
+        AnalysisResult analysis = null;
+        AIServiceException lastException = null;
 
-        if (openAIResponse.getChoices() == null || openAIResponse.getChoices().isEmpty()) {
-            throw new AIServiceException("AI service returned no response choices");
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            try {
+                log.info("OpenAI attempt {}/2 with timeout {}s...", attempt, TIMEOUT_SECONDS);
+                OpenAIResponse openAIResponse = openAIService.sendJsonChatCompletionWithTimeout(
+                        messages, TEMPERATURE, MAX_TOKENS, TIMEOUT_SECONDS);
+
+                if (openAIResponse.getChoices() == null || openAIResponse.getChoices().isEmpty()) {
+                    throw new AIServiceException("AI service returned no response choices");
+                }
+                OpenAIService.Message responseMsg = openAIResponse.getChoices().get(0).getMessage();
+                if (responseMsg == null || responseMsg.getContent() == null || responseMsg.getContent().isBlank()) {
+                    throw new AIServiceException("AI service returned empty response content");
+                }
+
+                String aiResponse = responseMsg.getContent();
+                log.debug("=== RAW OPENAI RESPONSE (attempt {}) ===\n{}", attempt, aiResponse);
+
+                analysis = parseAnalysisResponse(aiResponse);
+                log.info("OpenAI attempt {} succeeded", attempt);
+                break; // success — exit retry loop
+
+            } catch (AIServiceException e) {
+                lastException = e;
+                String errMsg = e.getMessage() != null ? e.getMessage() : "";
+                // Never retry rate-limit or auth failures — they won't improve with time
+                if (errMsg.contains("rate limit") || errMsg.contains("429")
+                        || errMsg.contains("authentication") || errMsg.contains("401")) {
+                    log.error("Non-retryable OpenAI error on attempt {}: {}", attempt, errMsg);
+                    throw e;
+                }
+                if (attempt < 2) {
+                    log.warn("OpenAI attempt {} failed ({}), retrying in 3s...", attempt, errMsg);
+                    try { Thread.sleep(3000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                } else {
+                    log.error("OpenAI call failed after {} attempts: {}", attempt, errMsg);
+                }
+            }
         }
-        OpenAIService.Message msg = openAIResponse.getChoices().get(0).getMessage();
-        if (msg == null || msg.getContent() == null || msg.getContent().isBlank()) {
-            throw new AIServiceException("AI service returned empty response content");
+
+        if (analysis == null) {
+            throw lastException != null ? lastException
+                    : new AIServiceException("Analysis failed after retries — please try again.");
         }
-
-        String aiResponse = msg.getContent();
-        log.debug("=== RAW OPENAI RESPONSE ===\n{}", aiResponse);
-
-        AnalysisResult analysis = parseAnalysisResponse(aiResponse);
 
         // Validate score
         if (analysis.getScore() == null) {

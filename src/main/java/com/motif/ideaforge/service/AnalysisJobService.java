@@ -161,10 +161,30 @@ public class AnalysisJobService {
             job.markCompleted(result);
             log.info("Job {} COMPLETED — score: {}", jobId, result.getScore());
 
-        } catch (Exception e) {
-            String message = e.getMessage() != null ? e.getMessage() : "Unknown error during analysis";
-            job.markFailed(message);
-            log.error("Job {} FAILED: {}", jobId, message, e);
+        } catch (Exception firstException) {
+            // One automatic retry for transient failures (timeout, network blip, parse error)
+            String firstMsg = firstException.getMessage() != null ? firstException.getMessage() : "";
+            boolean retryable = !firstMsg.contains("rate limit") && !firstMsg.contains("429")
+                    && !firstMsg.contains("authentication") && !firstMsg.contains("401")
+                    && !firstMsg.contains("API key");
+
+            if (retryable) {
+                log.warn("Job {} first attempt failed ({}), retrying after 5s...", jobId, firstMsg);
+                try {
+                    Thread.sleep(5000);
+                    AnalysisResponse result = ideaAnalyzerService.analyzeIdea(userId, request);
+                    job.markCompleted(result);
+                    log.info("Job {} COMPLETED on retry — score: {}", jobId, result.getScore());
+                } catch (Exception retryException) {
+                    String message = retryException.getMessage() != null
+                            ? retryException.getMessage() : "Analysis failed after retry";
+                    job.markFailed(message);
+                    log.error("Job {} FAILED after retry: {}", jobId, message, retryException);
+                }
+            } else {
+                job.markFailed(firstMsg);
+                log.error("Job {} FAILED (non-retryable): {}", jobId, firstMsg, firstException);
+            }
 
         } finally {
             // Remove from dedupe index so the user can start a fresh job later
