@@ -50,6 +50,11 @@ spring:
           min-idle: 2
         shutdown-timeout: 100ms  # Quick shutdown
 
+# Tavily web-search (optional — analysis works without it)
+tavily:
+  api:
+    key: ${TAVILY_API_KEY:}   # Leave blank to disable web search enrichment
+
 # Application-specific configuration
 app:
   openai:

@@ -8,6 +8,8 @@ import com.motif.ideaforge.exception.ResourceNotFoundException;
 import com.motif.ideaforge.model.dto.request.AnalyzeIdeaRequest;
 import com.motif.ideaforge.model.dto.response.AnalysisResponse;
 import com.motif.ideaforge.model.dto.response.CompetitorDto;
+import com.motif.ideaforge.model.dto.response.HeuristicScoresDto;
+import com.motif.ideaforge.model.dto.response.InvestorAnalysisDto;
 import com.motif.ideaforge.model.dto.response.MarketSizeDto;
 import com.motif.ideaforge.model.dto.response.SubmitReviewResponse;
 import com.motif.ideaforge.model.entity.IdeaAnalysis;
@@ -39,6 +41,7 @@ import java.util.UUID;
 public class IdeaAnalyzerService {
 
     private final OpenAIService openAIService;
+    private final WebSearchService webSearchService;
     private final IdeaAnalysisRepository ideaAnalysisRepository;
     private final ObjectMapper objectMapper;
 
@@ -63,7 +66,26 @@ public class IdeaAnalyzerService {
                 effectiveDescription.length() > 200 ? effectiveDescription.substring(0, 200) + "..." : effectiveDescription);
         log.info("Target Market: {}", targetMarket);
 
-        String prompt = buildAnalysisPrompt(effectiveTitle, effectiveDescription, targetMarket);
+        // ── Optional web research (graceful fallback if Tavily not configured) ──
+        String researchContext = "";
+        boolean researchUsed = false;
+        if (webSearchService.isAvailable()) {
+            try {
+                String marketQuery = effectiveTitle + " market size competitors";
+                String competitorQuery = effectiveTitle + " startup competitors alternatives";
+                String marketResults    = webSearchService.search(marketQuery);
+                String competitorResults = webSearchService.search(competitorQuery);
+                if (!marketResults.isBlank() || !competitorResults.isBlank()) {
+                    researchContext = buildResearchContext(marketResults, competitorResults);
+                    researchUsed = true;
+                    log.info("Web research context gathered ({} chars)", researchContext.length());
+                }
+            } catch (Exception e) {
+                log.warn("Web search failed (non-fatal) — continuing without research: {}", e.getMessage());
+            }
+        }
+
+        String prompt = buildAnalysisPrompt(effectiveTitle, effectiveDescription, targetMarket, researchContext);
         log.debug("=== PROMPT SENT TO OPENAI ===\n{}", prompt);
 
         List<ChatMessage> messages = List.of(
@@ -99,16 +121,32 @@ public class IdeaAnalyzerService {
             analysis.setConfidenceScore(Math.max(0, Math.min(100, analysis.getConfidenceScore())));
         }
 
+        // Clamp heuristic dimension scores (each 0–20)
+        if (analysis.getHeuristicScores() != null) {
+            HeuristicScoresData hs = analysis.getHeuristicScores();
+            if (hs.getProblem()       != null) hs.setProblem(Math.max(0, Math.min(20, hs.getProblem())));
+            if (hs.getMarket()        != null) hs.setMarket(Math.max(0, Math.min(20, hs.getMarket())));
+            if (hs.getDefensibility() != null) hs.setDefensibility(Math.max(0, Math.min(20, hs.getDefensibility())));
+            if (hs.getMonetization()  != null) hs.setMonetization(Math.max(0, Math.min(20, hs.getMonetization())));
+            if (hs.getExecution()     != null) hs.setExecution(Math.max(0, Math.min(20, hs.getExecution())));
+        }
+
         // Default null list fields
         if (analysis.getStrengths() == null)      analysis.setStrengths(Collections.emptyList());
         if (analysis.getWeaknesses() == null)     analysis.setWeaknesses(Collections.emptyList());
         if (analysis.getRecommendations() == null) analysis.setRecommendations(Collections.emptyList());
         if (analysis.getCompetitors() == null)    analysis.setCompetitors(Collections.emptyList());
 
-        log.info("=== PARSED ANALYSIS === Score: {}, Competitors: {}, ConfidenceScore: {}",
+        // Default null investor_analysis key_questions
+        if (analysis.getInvestorAnalysis() != null && analysis.getInvestorAnalysis().getKeyQuestions() == null) {
+            analysis.getInvestorAnalysis().setKeyQuestions(Collections.emptyList());
+        }
+
+        log.info("=== PARSED ANALYSIS === Score: {}, Competitors: {}, ConfidenceScore: {}, ResearchUsed: {}",
                 analysis.getScore(),
                 analysis.getCompetitors().size(),
-                analysis.getConfidenceScore());
+                analysis.getConfidenceScore(),
+                researchUsed);
 
         // Serialize structured fields to JSON strings for the TEXT columns
         String competitionJson = buildCompetitionJson(analysis);
@@ -232,9 +270,34 @@ public class IdeaAnalyzerService {
                     .build();
         }
 
+        // Map HeuristicScoresData → HeuristicScoresDto
+        HeuristicScoresDto heuristicDto = null;
+        if (analysis.getHeuristicScores() != null) {
+            HeuristicScoresData hs = analysis.getHeuristicScores();
+            heuristicDto = HeuristicScoresDto.builder()
+                    .problem(hs.getProblem())
+                    .market(hs.getMarket())
+                    .defensibility(hs.getDefensibility())
+                    .monetization(hs.getMonetization())
+                    .execution(hs.getExecution())
+                    .build();
+        }
+
+        // Map InvestorAnalysisData → InvestorAnalysisDto
+        InvestorAnalysisDto investorDto = null;
+        if (analysis.getInvestorAnalysis() != null) {
+            InvestorAnalysisData ia = analysis.getInvestorAnalysis();
+            investorDto = InvestorAnalysisDto.builder()
+                    .bullCase(ia.getBullCase())
+                    .bearCase(ia.getBearCase())
+                    .keyQuestions(ia.getKeyQuestions() != null ? ia.getKeyQuestions() : Collections.emptyList())
+                    .build();
+        }
+
         return AnalysisResponse.builder()
                 .analysisId(analysisId)
                 .score(analysis.getScore())
+                .ideaSummary(analysis.getIdeaSummary())
                 .strengths(analysis.getStrengths())
                 .weaknesses(analysis.getWeaknesses())
                 .recommendations(analysis.getRecommendations())
@@ -242,6 +305,8 @@ public class IdeaAnalyzerService {
                 .competitors(competitorDtos)
                 .competitiveAdvantage(analysis.getCompetitiveAdvantage())
                 .market(marketDto)
+                .heuristicScores(heuristicDto)
+                .investorAnalysis(investorDto)
                 .confidenceScore(analysis.getConfidenceScore())
                 .timestamp(timestamp)
                 .build();
@@ -274,7 +339,23 @@ public class IdeaAnalyzerService {
 
     // ── Prompt builders ──────────────────────────────────────────────────────
 
-    private String buildAnalysisPrompt(String title, String description, String targetMarket) {
+    private String buildResearchContext(String marketResults, String competitorResults) {
+        StringBuilder sb = new StringBuilder();
+        if (!marketResults.isBlank()) {
+            sb.append("MARKET RESEARCH SNIPPETS (from web search — use for grounding, not as authoritative sources):\n")
+              .append(marketResults).append("\n");
+        }
+        if (!competitorResults.isBlank()) {
+            sb.append("COMPETITOR RESEARCH SNIPPETS:\n")
+              .append(competitorResults).append("\n");
+        }
+        return sb.toString().trim();
+    }
+
+    private String buildAnalysisPrompt(String title, String description, String targetMarket, String researchContext) {
+        String researchSection = researchContext.isBlank() ? "" :
+                "\n───────────────────────────────────────\nWEB RESEARCH CONTEXT (use for grounding only — do not treat as authoritative data)\n───────────────────────────────────────\n" + researchContext + "\n";
+
         return String.format("""
                 ═══════════════════════════════════════
                 IDEA UNDER ANALYSIS
@@ -282,8 +363,7 @@ public class IdeaAnalyzerService {
                 Title:         %s
                 Description:   %s
                 Target Market: %s
-                ═══════════════════════════════════════
-
+                ═══════════════════════════════════════%s
                 You are an investor conducting due diligence on the pitch above.
                 Complete all 7 steps INTERNALLY in order, then output ONE JSON object.
                 Do NOT output the steps. Do NOT output anything outside the JSON braces.
@@ -375,6 +455,23 @@ public class IdeaAnalyzerService {
                 ───────────────────────────────────────
                 {
                   "score": <sum of the 5 Step-6 net scores, integer 0–100>,
+                  "idea_summary": "<1–3 sentence plain-language summary of this specific idea>",
+                  "heuristic_scores": {
+                    "problem":       <Step-6 Problem Severity net score, integer 0–20>,
+                    "market":        <Step-6 Market Size Realism net score, integer 0–20>,
+                    "defensibility": <Step-6 Defensibility net score, integer 0–20>,
+                    "monetization":  <Step-6 Monetization net score, integer 0–20>,
+                    "execution":     <Step-6 Execution Complexity net score, integer 0–20>
+                  },
+                  "investor_analysis": {
+                    "bull_case": "<one compelling paragraph why this could be a breakout — must cite at least one quoted phrase from the description>",
+                    "bear_case": "<one compelling paragraph why this could fail — must cite at least one specific detail>",
+                    "key_questions": [
+                      "<hard due-diligence question an investor would ask before writing a check>",
+                      "<second investor question>",
+                      "<third investor question>"
+                    ]
+                  },
                   "strengths": [
                     "<best Step-6 category> <net>/20: \\"<exact quoted phrase>\\" — <implication specific to this idea>",
                     "<second-best category> <net>/20: <idea-specific reasoning with specific anchor>",
@@ -412,7 +509,8 @@ public class IdeaAnalyzerService {
                 """,
                 title,
                 description,
-                targetMarket != null ? targetMarket : "General"
+                targetMarket != null ? targetMarket : "General",
+                researchSection
         );
     }
 
@@ -473,6 +571,8 @@ public class IdeaAnalyzerService {
     @AllArgsConstructor
     public static class AnalysisResult {
         private Integer score;
+        @JsonProperty("idea_summary")
+        private String ideaSummary;
         private List<String> strengths;
         private List<String> weaknesses;
         private List<String> recommendations;
@@ -483,6 +583,10 @@ public class IdeaAnalyzerService {
         private String viability;
         @JsonProperty("confidence_score")
         private Integer confidenceScore;
+        @JsonProperty("heuristic_scores")
+        private HeuristicScoresData heuristicScores;
+        @JsonProperty("investor_analysis")
+        private InvestorAnalysisData investorAnalysis;
     }
 
     @Data
@@ -506,5 +610,28 @@ public class IdeaAnalyzerService {
         private String growthRate;
         @JsonProperty("source_summary")
         private String sourceSummary;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class HeuristicScoresData {
+        private Integer problem;
+        private Integer market;
+        private Integer defensibility;
+        private Integer monetization;
+        private Integer execution;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class InvestorAnalysisData {
+        @JsonProperty("bull_case")
+        private String bullCase;
+        @JsonProperty("bear_case")
+        private String bearCase;
+        @JsonProperty("key_questions")
+        private List<String> keyQuestions;
     }
 }
