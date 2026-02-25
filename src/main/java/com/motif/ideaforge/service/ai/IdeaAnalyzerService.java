@@ -47,7 +47,7 @@ public class IdeaAnalyzerService {
 
     // Analysis settings
     private static final int MAX_TOKENS = 4000;
-    private static final int TIMEOUT_SECONDS = 45;
+    private static final int TIMEOUT_SECONDS = 120;
     private static final double TEMPERATURE = 0.5;
 
     // Removed @Transactional to allow returning results even if DB save fails
