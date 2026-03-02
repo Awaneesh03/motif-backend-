@@ -46,6 +46,9 @@ public class AIController {
     private final CaseEvaluatorService caseEvaluatorService;
     private final PitchGeneratorService pitchGeneratorService;
 
+    // TEST SECRET - For secret detection testing only
+    private String testKey = "sk-test-123456789";
+
     /**
      * Analyze a startup idea - Primary endpoint
      * Supports both simple {"idea": "..."} and detailed {"title": "...", "description": "..."} formats
