@@ -34,7 +34,14 @@ public class CaseEvaluatorService {
             ChatMessage.builder().role("user").content(prompt).build()
         );
         OpenAIResponse resp = openAIService.sendChatCompletion(messages, 0.3, 1000).join();
-        String content = resp.getChoices().get(0).getMessage().getContent();
+        if (resp.getChoices() == null || resp.getChoices().isEmpty()) {
+            throw new AIServiceException("AI service returned no response choices");
+        }
+        OpenAIService.Message msg = resp.getChoices().get(0).getMessage();
+        if (msg == null || msg.getContent() == null || msg.getContent().isBlank()) {
+            throw new AIServiceException("AI service returned empty response content");
+        }
+        String content = msg.getContent();
         EvalResult result = parseResponse(content);
         return CaseEvaluationResponse.builder().score(result.getScore()).verdict(result.getVerdict()).feedback(result.getFeedback()).strengths(result.getStrengths()).improvements(result.getImprovements()).timestamp(Instant.now()).build();
     }

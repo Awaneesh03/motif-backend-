@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -183,6 +184,28 @@ public class IdeaAnalyzerService {
         String competitionJson = buildCompetitionJson(analysis);
         String marketSizeJson = buildMarketSizeJson(analysis);
 
+        // Convert heuristic scores to Map for JSONB storage
+        Map<String, Integer> heuristicScoresMap = null;
+        if (analysis.getHeuristicScores() != null) {
+            HeuristicScoresData hs = analysis.getHeuristicScores();
+            heuristicScoresMap = new java.util.LinkedHashMap<>();
+            heuristicScoresMap.put("problem", hs.getProblem());
+            heuristicScoresMap.put("market", hs.getMarket());
+            heuristicScoresMap.put("defensibility", hs.getDefensibility());
+            heuristicScoresMap.put("monetization", hs.getMonetization());
+            heuristicScoresMap.put("execution", hs.getExecution());
+        }
+
+        // Convert investor analysis to Map for JSONB storage
+        Map<String, Object> investorAnalysisMap = null;
+        if (analysis.getInvestorAnalysis() != null) {
+            InvestorAnalysisData ia = analysis.getInvestorAnalysis();
+            investorAnalysisMap = new java.util.LinkedHashMap<>();
+            investorAnalysisMap.put("bull_case", ia.getBullCase());
+            investorAnalysisMap.put("bear_case", ia.getBearCase());
+            investorAnalysisMap.put("key_questions", ia.getKeyQuestions() != null ? ia.getKeyQuestions() : Collections.emptyList());
+        }
+
         try {
             Optional<IdeaAnalysis> existing = ideaAnalysisRepository.findByUserIdAndIdeaTitle(userId, effectiveTitle);
             IdeaAnalysis entity;
@@ -197,6 +220,11 @@ public class IdeaAnalyzerService {
                 entity.setMarketSize(marketSizeJson);
                 entity.setCompetition(competitionJson);
                 entity.setViability(analysis.getViability());
+                entity.setIdeaSummary(analysis.getIdeaSummary());
+                entity.setHeuristicScores(heuristicScoresMap);
+                entity.setInvestorAnalysis(investorAnalysisMap);
+                entity.setConfidenceScore(analysis.getConfidenceScore());
+                entity.setCompetitiveAdvantage(analysis.getCompetitiveAdvantage());
                 log.info("Updating existing analysis row for title: '{}'", effectiveTitle);
             } else {
                 entity = IdeaAnalysis.builder()
@@ -211,6 +239,11 @@ public class IdeaAnalyzerService {
                         .marketSize(marketSizeJson)
                         .competition(competitionJson)
                         .viability(analysis.getViability())
+                        .ideaSummary(analysis.getIdeaSummary())
+                        .heuristicScores(heuristicScoresMap)
+                        .investorAnalysis(investorAnalysisMap)
+                        .confidenceScore(analysis.getConfidenceScore())
+                        .competitiveAdvantage(analysis.getCompetitiveAdvantage())
                         .build();
                 log.info("Inserting new analysis row for title: '{}'", effectiveTitle);
             }

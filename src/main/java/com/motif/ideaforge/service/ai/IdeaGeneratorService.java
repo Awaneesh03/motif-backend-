@@ -37,7 +37,14 @@ public class IdeaGeneratorService {
             ).build()
         );
         OpenAIResponse resp = openAIService.sendChatCompletionWithTimeout(messages, 0.9, MAX_TOKENS, TIMEOUT_SECONDS);
-        String content = resp.getChoices().get(0).getMessage().getContent();
+        if (resp.getChoices() == null || resp.getChoices().isEmpty()) {
+            throw new AIServiceException("AI service returned no response choices");
+        }
+        OpenAIService.Message msg = resp.getChoices().get(0).getMessage();
+        if (msg == null || msg.getContent() == null || msg.getContent().isBlank()) {
+            throw new AIServiceException("AI service returned empty response content");
+        }
+        String content = msg.getContent();
         GeneratedIdea idea = parseResponse(content);
         return IdeaResponse.builder().title(idea.getTitle()).description(idea.getDescription()).targetMarket(idea.getTargetMarket()).build();
     }

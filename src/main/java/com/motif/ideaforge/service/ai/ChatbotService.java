@@ -41,7 +41,14 @@ public class ChatbotService {
         OpenAIResponse openAIResponse = openAIService.sendChatCompletionWithTimeout(
                 messages, TEMPERATURE, MAX_TOKENS, TIMEOUT_SECONDS);
 
-        String response = openAIResponse.getChoices().get(0).getMessage().getContent();
+        if (openAIResponse.getChoices() == null || openAIResponse.getChoices().isEmpty()) {
+            throw new AIServiceException("AI service returned no response choices");
+        }
+        OpenAIService.Message msg = openAIResponse.getChoices().get(0).getMessage();
+        if (msg == null || msg.getContent() == null || msg.getContent().isBlank()) {
+            throw new AIServiceException("AI service returned empty response content");
+        }
+        String response = msg.getContent();
 
         long duration = System.currentTimeMillis() - startTime;
         log.info("=== CHAT SUCCESS === Duration: {}ms, Response length: {}", duration, response.length());
