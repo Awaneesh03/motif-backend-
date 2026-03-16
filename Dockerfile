@@ -1,10 +1,10 @@
 # Multi-stage Docker build for Render deployment
-# Cache bust: v4
+# Cache bust: v5
 
 # ============================================
-# Stage 1: Build Stage (use older stable Maven/JDK)
+# Stage 1: Build Stage (Amazon Corretto - stable JDK)
 # ============================================
-FROM maven:3.8.6-eclipse-temurin-17 AS build
+FROM maven:3.8.6-amazoncorretto-17 AS build
 
 WORKDIR /build
 
