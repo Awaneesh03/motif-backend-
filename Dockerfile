@@ -1,10 +1,12 @@
 # Multi-stage Docker build for Render deployment
-# Cache bust: v5
 
 # ============================================
-# Stage 1: Build Stage (Amazon Corretto - stable JDK)
+# Stage 1: Build Stage
 # ============================================
-FROM maven:3.8.6-amazoncorretto-17 AS build
+FROM maven:3.9-eclipse-temurin-17-alpine AS build
+
+# Add JVM args to fix Lombok compatibility with newer JDK
+ENV MAVEN_OPTS="--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED"
 
 WORKDIR /build
 
