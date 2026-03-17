@@ -1,5 +1,6 @@
 package com.motif.ideaforge.service.ai;
 
+import com.motif.ideaforge.exception.AIServiceException;
 import com.motif.ideaforge.model.dto.request.ChatMessageRequest;
 import com.motif.ideaforge.model.dto.response.ChatResponse;
 import com.motif.ideaforge.service.ai.OpenAIService.ChatMessage;
