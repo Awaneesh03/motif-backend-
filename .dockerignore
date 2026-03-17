@@ -40,8 +40,8 @@ docs/
 .github/
 .gitlab-ci.yml
 
-# Maven wrapper (we don't use it)
-.mvn/
+# Maven wrapper (keep .mvn/jvm.config for Lombok compatibility)
+.mvn/wrapper/
 mvnw
 mvnw.cmd
 
