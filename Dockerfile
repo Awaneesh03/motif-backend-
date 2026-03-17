@@ -5,16 +5,24 @@
 # ============================================
 FROM maven:3.9-eclipse-temurin-17-alpine AS build
 
+# JAVA_TOOL_OPTIONS is picked up by ALL JVM processes (including annotation processors)
+ENV JAVA_TOOL_OPTIONS="\
+--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED \
+--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED \
+--add-opens=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED \
+--add-opens=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED \
+--add-opens=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED \
+--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED \
+--add-opens=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED \
+--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED \
+--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED \
+--add-opens=jdk.compiler/com.sun.tools.javac.jvm=ALL-UNNAMED"
+
 WORKDIR /build
 
-# Copy Maven config with JVM args for Lombok compatibility
-COPY .mvn .mvn
 COPY pom.xml .
-
-# Download dependencies (cached layer)
 RUN mvn dependency:go-offline -B
 
-# Copy source and build
 COPY src ./src
 RUN mvn clean package -DskipTests -B
 
@@ -25,10 +33,8 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-# Create non-root user
 RUN addgroup -S spring && adduser -S spring -G spring
 
-# Copy the built jar
 COPY --from=build /build/target/idea-forge-backend.jar app.jar
 
 RUN chown -R spring:spring /app
@@ -37,7 +43,6 @@ USER spring:spring
 
 EXPOSE 8080
 
-# Render injects PORT at runtime
 ENTRYPOINT ["sh", "-c", "exec java \
   -XX:+UseContainerSupport \
   -XX:MaxRAMPercentage=75.0 \
