@@ -192,7 +192,14 @@ public class MentorChatService {
         OpenAIResponse response = openAIService.sendChatCompletionWithTimeout(
                 messages, 0.3, CONTEXT_MAX_TOKENS, CONTEXT_TIMEOUT_SEC);
 
-        String raw = response.getChoices().get(0).getMessage().getContent();
+        if (response.getChoices() == null || response.getChoices().isEmpty()) {
+            throw new AIServiceException("Mentor context: AI returned no response choices");
+        }
+        OpenAIService.Message msg = response.getChoices().get(0).getMessage();
+        if (msg == null || msg.getContent() == null || msg.getContent().isBlank()) {
+            throw new AIServiceException("Mentor context: AI returned empty content");
+        }
+        String raw = msg.getContent();
         String json = extractJson(raw);
         return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
     }

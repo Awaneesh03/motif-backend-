@@ -42,8 +42,10 @@ public class PitchGeneratorService {
                 messages, 0.7, MAX_TOKENS, TIMEOUT_SECONDS);
 
             if (response.getChoices() != null && !response.getChoices().isEmpty()) {
-                String aiResponse = response.getChoices().get(0).getMessage().getContent();
-                return parsePitchResponse(aiResponse, request);
+                OpenAIService.Message msg = response.getChoices().get(0).getMessage();
+                if (msg != null && msg.getContent() != null && !msg.getContent().isBlank()) {
+                    return parsePitchResponse(msg.getContent(), request);
+                }
             }
         } catch (Exception e) {
             log.error("Error generating pitch deck: {}", e.getMessage());
