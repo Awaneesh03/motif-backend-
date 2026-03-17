@@ -5,48 +5,45 @@
 # ============================================
 FROM maven:3.9-eclipse-temurin-17-alpine AS build
 
-# Add JVM args to fix Lombok compatibility with newer JDK
-ENV MAVEN_OPTS="--add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED"
-
 WORKDIR /build
 
+# Copy Maven config with JVM args for Lombok compatibility
+COPY .mvn .mvn
 COPY pom.xml .
+
+# Download dependencies (cached layer)
 RUN mvn dependency:go-offline -B
 
+# Copy source and build
 COPY src ./src
-RUN mvn clean package -DskipTests -B && \
-    mv target/idea-forge-backend.jar target/app.jar
+RUN mvn clean package -DskipTests -B
 
 # ============================================
 # Stage 2: Runtime Stage
 # ============================================
-FROM eclipse-temurin:17-jre-jammy
+FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends wget && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# Create non-root user
+RUN addgroup -S spring && adduser -S spring -G spring
 
-RUN groupadd -r spring && useradd -r -g spring spring
-
-COPY --from=build /build/target/app.jar /app/app.jar
+# Copy the built jar
+COPY --from=build /build/target/idea-forge-backend.jar app.jar
 
 RUN chown -R spring:spring /app
 
 USER spring:spring
 
-# Render injects PORT at runtime — do NOT hardcode it here
 EXPOSE 8080
 
-# exec replaces sh with java, making java PID 1 — required for Render port detection
+# Render injects PORT at runtime
 ENTRYPOINT ["sh", "-c", "exec java \
   -XX:+UseContainerSupport \
   -XX:MaxRAMPercentage=75.0 \
   -XX:+ExitOnOutOfMemoryError \
   -Djava.security.egd=file:/dev/./urandom \
   -Dspring.profiles.active=prod \
-  -Dserver.port=$PORT \
+  -Dserver.port=${PORT:-8080} \
   -Dserver.address=0.0.0.0 \
   -jar app.jar"]
