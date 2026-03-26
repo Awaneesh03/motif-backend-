@@ -1,6 +1,8 @@
 package com.motif.ideaforge.repository;
 
 import com.motif.ideaforge.model.entity.IdeaAnalysis;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -15,6 +17,13 @@ import java.util.UUID;
 public interface IdeaAnalysisRepository extends JpaRepository<IdeaAnalysis, UUID> {
 
     List<IdeaAnalysis> findByUserIdOrderByCreatedAtDesc(UUID userId);
+
+    /**
+     * Paginated version — prefer this for any endpoint returning user idea lists
+     * to avoid loading all rows when a user has many analyses.
+     * Example: findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, 20))
+     */
+    Page<IdeaAnalysis> findByUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
     /** Returns the most recent analysis for the user — used by MentorChatService. */
     Optional<IdeaAnalysis> findFirstByUserIdOrderByCreatedAtDesc(UUID userId);

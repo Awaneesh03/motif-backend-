@@ -1,6 +1,7 @@
 package com.motif.ideaforge.service.ai;
 
 import com.motif.ideaforge.exception.AIServiceException;
+import com.motif.ideaforge.exception.ValidationException;
 import com.motif.ideaforge.model.dto.request.ChatMessageRequest;
 import com.motif.ideaforge.model.dto.response.ChatResponse;
 import com.motif.ideaforge.service.ai.OpenAIService.ChatMessage;
@@ -76,6 +77,10 @@ public class ChatbotService {
     }
 
     private List<ChatMessage> buildMessages(ChatMessageRequest request) {
+        if (request.getMessage() == null || request.getMessage().isBlank()) {
+            throw new ValidationException("Message cannot be empty");
+        }
+
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.builder()
                 .role("system")
@@ -86,19 +91,23 @@ public class ChatbotService {
         if (request.getHistory() != null && !request.getHistory().isEmpty()) {
             int historyStart = Math.max(0, request.getHistory().size() - 10);
             request.getHistory().subList(historyStart, request.getHistory().size())
-                    .forEach(historyItem ->
+                    .forEach(historyItem -> {
+                        // Skip history entries with null content to avoid NPE in OpenAI call
+                        if (historyItem.getRole() != null && historyItem.getContent() != null
+                                && !historyItem.getContent().isBlank()) {
                             messages.add(ChatMessage.builder()
                                     .role(historyItem.getRole())
                                     .content(historyItem.getContent())
-                                    .build())
-                    );
+                                    .build());
+                        }
+                    });
             log.debug("Added {} history messages", Math.min(request.getHistory().size(), 10));
         }
 
         // Add current message
         messages.add(ChatMessage.builder()
                 .role("user")
-                .content(request.getMessage())
+                .content(request.getMessage().trim())
                 .build());
 
         return messages;
