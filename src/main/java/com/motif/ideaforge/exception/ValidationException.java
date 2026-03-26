@@ -3,6 +3,7 @@ package com.motif.ideaforge.exception;
 import lombok.Getter;
 import org.springframework.http.HttpStatus;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -13,8 +14,13 @@ import java.util.Map;
 public class ValidationException extends BaseException {
     private final List<Map<String, String>> validationErrors;
 
+    public ValidationException(String message) {
+        super(message, HttpStatus.BAD_REQUEST, "VALIDATION_ERROR");
+        this.validationErrors = Collections.emptyList();
+    }
+
     public ValidationException(String message, List<Map<String, String>> validationErrors) {
         super(message, HttpStatus.BAD_REQUEST, "VALIDATION_ERROR");
-        this.validationErrors = validationErrors;
+        this.validationErrors = validationErrors != null ? validationErrors : Collections.emptyList();
     }
 }
