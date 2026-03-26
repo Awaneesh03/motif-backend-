@@ -57,9 +57,10 @@ public class IdeaAnalyzerService {
         log.info("=== IDEA ANALYZER SERVICE START ===");
         log.info("User ID: {}", userId);
 
-        String effectiveTitle = request.getEffectiveTitle();
-        String effectiveDescription = request.getEffectiveDescription();
-        String targetMarket = request.getTargetMarket();
+        // ── Sanitize inputs to prevent prompt injection ───────────────────────
+        String effectiveTitle = sanitizeInput(request.getEffectiveTitle(), 200);
+        String effectiveDescription = sanitizeInput(request.getEffectiveDescription(), 5000);
+        String targetMarket = sanitizeInput(request.getTargetMarket(), 200);
 
         log.info("Effective Title: {}", effectiveTitle);
         log.info("Effective Description ({} chars): {}",
@@ -399,6 +400,32 @@ public class IdeaAnalyzerService {
             log.warn("Failed to serialize market size data: {}", e.getMessage());
             return null;
         }
+    }
+
+    // ── Input sanitization ────────────────────────────────────────────────────
+
+    /**
+     * Sanitizes user input before embedding it in AI prompts.
+     * Strips characters that are commonly used in prompt injection attacks,
+     * enforces a maximum length, and normalises whitespace.
+     */
+    private String sanitizeInput(String input, int maxLength) {
+        if (input == null) return "";
+        // Remove control characters and common prompt-injection delimiters
+        String sanitized = input
+                .replaceAll("[\\p{Cntrl}&&[^\n\t]]", "")   // strip control chars (keep newline/tab)
+                .replace("===", "---")                        // neutralise section separators used in our prompt
+                .replace("───", "---")
+                .replace("ABSOLUTE CONSTRAINTS", "")
+                .replace("SYSTEM:", "")
+                .replace("IGNORE PREVIOUS", "")
+                .replaceAll("(?i)ignore (above|previous|all) instructions?", "")
+                .trim();
+        // Enforce length cap
+        if (sanitized.length() > maxLength) {
+            sanitized = sanitized.substring(0, maxLength);
+        }
+        return sanitized;
     }
 
     // ── Prompt builders ──────────────────────────────────────────────────────

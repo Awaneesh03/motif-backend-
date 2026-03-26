@@ -2,6 +2,7 @@ package com.motif.ideaforge.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -114,6 +115,46 @@ public class GlobalExceptionHandler {
                 .body(errorResponse);
     }
 
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityException(
+            DataIntegrityViolationException ex,
+            HttpServletRequest request) {
+        log.error("Data integrity violation: {}", ex.getMessage());
+
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .timestamp(Instant.now())
+                .status(HttpStatus.CONFLICT.value())
+                .error(HttpStatus.CONFLICT.getReasonPhrase())
+                .message("Request conflicts with existing data. This record may already exist.")
+                .errorCode("DATA_INTEGRITY_VIOLATION")
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(errorResponse);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgumentException(
+            IllegalArgumentException ex,
+            HttpServletRequest request) {
+        log.error("Illegal argument: {}", ex.getMessage());
+
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .timestamp(Instant.now())
+                .status(HttpStatus.BAD_REQUEST.value())
+                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+                .message(ex.getMessage() != null ? ex.getMessage() : "Invalid request argument")
+                .errorCode("INVALID_ARGUMENT")
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(errorResponse);
+    }
+
     @ExceptionHandler(CompletionException.class)
     public ResponseEntity<ErrorResponse> handleCompletionException(
             CompletionException ex,
@@ -121,6 +162,12 @@ public class GlobalExceptionHandler {
         Throwable cause = ex.getCause();
         if (cause instanceof BaseException baseEx) {
             return handleBaseException(baseEx, request);
+        }
+        if (cause instanceof DataIntegrityViolationException div) {
+            return handleDataIntegrityException(div, request);
+        }
+        if (cause instanceof IllegalArgumentException iae) {
+            return handleIllegalArgumentException(iae, request);
         }
         return handleGenericException(ex, request);
     }
