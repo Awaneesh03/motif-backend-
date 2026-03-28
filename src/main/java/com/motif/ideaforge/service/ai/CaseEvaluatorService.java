@@ -33,7 +33,7 @@ public class CaseEvaluatorService {
             ChatMessage.builder().role("system").content("You are an expert startup advisor. Evaluate solutions. Return valid JSON only.").build(),
             ChatMessage.builder().role("user").content(prompt).build()
         );
-        OpenAIResponse resp = openAIService.sendChatCompletion(messages, 0.3, 1000).join();
+        OpenAIResponse resp = openAIService.sendJsonChatCompletionWithTimeout(messages, 0.3, 1000, 30);
         if (resp.getChoices() == null || resp.getChoices().isEmpty()) {
             throw new AIServiceException("AI service returned no response choices");
         }
@@ -48,9 +48,9 @@ public class CaseEvaluatorService {
 
     private EvalResult parseResponse(String response) {
         try {
-            String json = response.contains("```") ? response.substring(response.indexOf("{"), response.lastIndexOf("}")+1) : response.trim();
-            return objectMapper.readValue(json, EvalResult.class);
+            return objectMapper.readValue(response.trim(), EvalResult.class);
         } catch (Exception e) {
+            log.warn("Failed to parse evaluation response: {}", e.getMessage());
             throw new AIServiceException("Failed to parse evaluation response");
         }
     }
