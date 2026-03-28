@@ -71,8 +71,8 @@ app:
 
   rate-limit:
     enabled: ${RATE_LIMIT_ENABLED:true}
-    ai-analyze: ${RATE_LIMIT_AI_ANALYZE:10}      # per hour
-    ai-generate: ${RATE_LIMIT_AI_GENERATE:5}     # per hour
+    ai-analyze: ${RATE_LIMIT_AI_ANALYZE:20}      # per hour
+    ai-generate: ${RATE_LIMIT_AI_GENERATE:20}    # per hour
     ai-chat: ${RATE_LIMIT_AI_CHAT:50}            # per hour
     idea-create: ${RATE_LIMIT_IDEA_CREATE:20}    # per hour
     idea-update: ${RATE_LIMIT_IDEA_UPDATE:50}    # per hour
