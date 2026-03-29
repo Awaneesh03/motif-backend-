@@ -1,5 +1,6 @@
 package com.motif.ideaforge.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.motif.ideaforge.model.dto.request.GeneratePitchRequest;
 import com.motif.ideaforge.model.dto.response.PitchResponse;
 import com.motif.ideaforge.model.dto.response.PitchResponse.SlideContent;
@@ -18,6 +19,8 @@ import java.util.List;
 public class PitchGeneratorService {
 
     private final OpenAIService openAIService;
+    /** Injected Spring-managed ObjectMapper — shared, thread-safe, avoids per-call allocation. */
+    private final ObjectMapper objectMapper;
 
     private static final int MAX_TOKENS = 2000;
     private static final int TIMEOUT_SECONDS = 60;
@@ -73,8 +76,7 @@ public class PitchGeneratorService {
                 int start = aiResponse.indexOf("{");
                 int end = aiResponse.lastIndexOf("}") + 1;
                 String json = aiResponse.substring(start, end);
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                return mapper.readValue(json, PitchResponse.class);
+                return objectMapper.readValue(json, PitchResponse.class);
             }
         } catch (Exception e) {
             log.warn("Failed to parse AI response", e);
