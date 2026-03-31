@@ -12,7 +12,6 @@ import java.util.List;
 @AllArgsConstructor
 public class PitchResponse {
     private List<SlideContent> slides;
-    private String speakerNotes;
 
     @Data
     @Builder
@@ -20,7 +19,6 @@ public class PitchResponse {
     @AllArgsConstructor
     public static class SlideContent {
         private String title;
-        private String content;
-        private List<String> bulletPoints;
+        private List<String> points;
     }
 }

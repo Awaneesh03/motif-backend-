@@ -11,8 +11,8 @@ COPY pom.xml .
 RUN mvn dependency:go-offline -B
 
 COPY src ./src
-RUN mvn clean package -DskipTests -B && \
-    mv target/idea-forge-backend.jar target/app.jar
+RUN mvn clean package -DskipTests -B -e && \
+    mv target/*.jar target/app.jar
 
 # ============================================
 # Stage 2: Runtime Stage

@@ -118,6 +118,16 @@ public class IdeaAnalysis {
     @Column(name = "competitive_advantage", columnDefinition = "TEXT")
     private String competitiveAdvantage;
 
+    /**
+     * Normalised idea title: trimmed, lowercased, whitespace-collapsed.
+     * Used as a deduplication key so "AI Startup" and "ai startup" are the same idea.
+     * Requires: ALTER TABLE idea_analyses ADD COLUMN IF NOT EXISTS normalized_idea TEXT;
+     *           CREATE UNIQUE INDEX IF NOT EXISTS uq_idea_analyses_user_normalized
+     *               ON idea_analyses(user_id, normalized_idea);
+     */
+    @Column(name = "normalized_idea", length = 255)
+    private String normalizedIdea;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @CreationTimestamp
     private Instant createdAt;
