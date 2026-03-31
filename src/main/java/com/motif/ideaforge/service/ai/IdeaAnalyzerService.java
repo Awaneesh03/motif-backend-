@@ -11,6 +11,7 @@ import com.motif.ideaforge.model.dto.response.CompetitorDto;
 import com.motif.ideaforge.model.dto.response.HeuristicScoresDto;
 import com.motif.ideaforge.model.dto.response.InvestorAnalysisDto;
 import com.motif.ideaforge.model.dto.response.MarketSizeDto;
+import com.motif.ideaforge.model.dto.response.RecentActivityResponse;
 import com.motif.ideaforge.model.dto.response.SubmitReviewResponse;
 import com.motif.ideaforge.model.entity.IdeaAnalysis;
 import com.motif.ideaforge.repository.IdeaAnalysisRepository;
@@ -31,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Service for analyzing startup ideas using AI.
@@ -207,49 +209,62 @@ public class IdeaAnalyzerService {
             investorAnalysisMap.put("key_questions", ia.getKeyQuestions() != null ? ia.getKeyQuestions() : Collections.emptyList());
         }
 
-        try {
-            Optional<IdeaAnalysis> existing = ideaAnalysisRepository.findByUserIdAndIdeaTitle(userId, effectiveTitle);
-            IdeaAnalysis entity;
-            if (existing.isPresent()) {
-                entity = existing.get();
-                entity.setIdeaDescription(effectiveDescription);
-                entity.setTargetMarket(targetMarket);
-                entity.setScore(analysis.getScore());
-                entity.setStrengths(analysis.getStrengths());
-                entity.setWeaknesses(analysis.getWeaknesses());
-                entity.setRecommendations(analysis.getRecommendations());
-                entity.setMarketSize(marketSizeJson);
-                entity.setCompetition(competitionJson);
-                entity.setViability(analysis.getViability());
-                entity.setIdeaSummary(analysis.getIdeaSummary());
-                entity.setHeuristicScores(heuristicScoresMap);
-                entity.setInvestorAnalysis(investorAnalysisMap);
-                entity.setConfidenceScore(analysis.getConfidenceScore());
-                entity.setCompetitiveAdvantage(analysis.getCompetitiveAdvantage());
-                log.info("Updating existing analysis row for title: '{}'", effectiveTitle);
-            } else {
-                entity = IdeaAnalysis.builder()
-                        .userId(userId)
-                        .ideaTitle(effectiveTitle)
-                        .ideaDescription(effectiveDescription)
-                        .targetMarket(targetMarket)
-                        .score(analysis.getScore())
-                        .strengths(analysis.getStrengths())
-                        .weaknesses(analysis.getWeaknesses())
-                        .recommendations(analysis.getRecommendations())
-                        .marketSize(marketSizeJson)
-                        .competition(competitionJson)
-                        .viability(analysis.getViability())
-                        .ideaSummary(analysis.getIdeaSummary())
-                        .heuristicScores(heuristicScoresMap)
-                        .investorAnalysis(investorAnalysisMap)
-                        .confidenceScore(analysis.getConfidenceScore())
-                        .competitiveAdvantage(analysis.getCompetitiveAdvantage())
-                        .build();
-                log.info("Inserting new analysis row for title: '{}'", effectiveTitle);
-            }
+        String normalizedIdea = normalizeIdea(effectiveTitle);
 
-            IdeaAnalysis saved = ideaAnalysisRepository.save(entity);
+        // ── Validate critical fields before attempting to persist ─────────────
+        // If any required field is missing the AI response is incomplete.
+        // We return the result to the user but skip the DB save to prevent
+        // partial/corrupted rows from being stored.
+        boolean analysisIsComplete = marketSizeJson != null
+                && competitionJson != null
+                && analysis.getIdeaSummary() != null && !analysis.getIdeaSummary().isBlank()
+                && analysis.getRecommendations() != null && !analysis.getRecommendations().isEmpty();
+
+        if (!analysisIsComplete) {
+            log.warn("Analysis for '{}' missing critical fields — skipping DB persist "
+                    + "(marketSize={}, competition={}, ideaSummary={}, recommendations={})",
+                    effectiveTitle,
+                    marketSizeJson != null,
+                    competitionJson != null,
+                    analysis.getIdeaSummary() != null,
+                    analysis.getRecommendations() != null ? analysis.getRecommendations().size() : 0);
+            return buildResponse(null, analysis, Instant.now());
+        }
+
+        try {
+            // Serialize JSONB fields to JSON strings for the native upsert query
+            String strengthsJson     = toJson(analysis.getStrengths());
+            String weaknessesJson    = toJson(analysis.getWeaknesses());
+            String recommendsJson    = toJson(analysis.getRecommendations());
+            String heuristicJson     = toJson(heuristicScoresMap);
+            String investorJson      = toJson(investorAnalysisMap);
+
+            // Atomic INSERT … ON CONFLICT DO UPDATE — no race condition possible
+            ideaAnalysisRepository.upsertAnalysis(
+                userId,
+                effectiveTitle,
+                normalizedIdea,
+                effectiveDescription,
+                targetMarket,
+                analysis.getScore(),
+                strengthsJson,
+                weaknessesJson,
+                recommendsJson,
+                marketSizeJson,
+                competitionJson,
+                analysis.getViability(),
+                analysis.getIdeaSummary(),
+                heuristicJson,
+                investorJson,
+                analysis.getConfidenceScore(),
+                analysis.getCompetitiveAdvantage()
+            );
+
+            // Re-fetch to get the persisted id and createdAt (preserved on conflict)
+            IdeaAnalysis saved = ideaAnalysisRepository
+                    .findByUserIdAndNormalizedIdea(userId, normalizedIdea)
+                    .orElseThrow(() -> new IllegalStateException("Upsert succeeded but row not found"));
+
             long duration = System.currentTimeMillis() - startTime;
             log.info("=== ANALYSIS COMPLETE === ID: {}, Score: {}, Duration: {}ms",
                     saved.getId(), saved.getScore(), duration);
@@ -264,6 +279,22 @@ public class IdeaAnalyzerService {
 
             return buildResponse(null, analysis, Instant.now());
         }
+    }
+
+    /**
+     * Returns up to 10 of the most recently analyzed ideas for the user,
+     * ordered by updated_at DESC (falls back to created_at for legacy rows).
+     * Used by GET /api/ideas/recent.
+     */
+    public List<RecentActivityResponse> getRecentActivity(UUID userId) {
+        return ideaAnalysisRepository.findTop10ByUserIdOrderByUpdatedAtDesc(userId)
+                .stream()
+                .map(a -> RecentActivityResponse.builder()
+                        .id(a.getId().toString())
+                        .title(a.getIdeaTitle())
+                        .updatedAt(a.getUpdatedAt() != null ? a.getUpdatedAt() : a.getCreatedAt())
+                        .build())
+                .collect(Collectors.toList());
     }
 
     /**
@@ -307,6 +338,28 @@ public class IdeaAnalyzerService {
                 .status("pending_review")
                 .submittedAt(Instant.now())
                 .build();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /** Normalises an idea title for deduplication: trim → lowercase → collapse whitespace. */
+    private String normalizeIdea(String title) {
+        if (title == null) return "";
+        return title.trim().toLowerCase().replaceAll("\\s+", " ");
+    }
+
+    /**
+     * Serializes any value to a JSON string for passing to a native JSONB column.
+     * Returns null if the value is null (Postgres CAST(NULL AS jsonb) = NULL).
+     */
+    private String toJson(Object value) {
+        if (value == null) return null;
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            log.warn("Failed to serialize value to JSON for upsert: {}", e.getMessage());
+            return null;
+        }
     }
 
     // ── Response builder ─────────────────────────────────────────────────────
