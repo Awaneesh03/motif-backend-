@@ -2,8 +2,10 @@ package com.motif.ideaforge.controller;
 
 import com.motif.ideaforge.model.dto.request.FundingQualificationRequest;
 import com.motif.ideaforge.model.dto.response.FundingQualificationResponse;
+import com.motif.ideaforge.model.dto.response.VcApplicationResponse;
 import com.motif.ideaforge.security.UserPrincipal;
 import com.motif.ideaforge.service.FundingQualificationService;
+import com.motif.ideaforge.service.VcApplicationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * Funding qualification endpoints.
@@ -31,6 +35,7 @@ import org.springframework.web.bind.annotation.*;
 public class FundingController {
 
     private final FundingQualificationService qualificationService;
+    private final VcApplicationService        vcApplicationService;
 
     /**
      * Returns the caller's saved qualification profile.
@@ -62,5 +67,19 @@ public class FundingController {
         log.info("Upsert qualification — user: {}", user.getId());
         FundingQualificationResponse response = qualificationService.upsert(user.getId(), request);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Returns the authenticated founder's own VC funding applications.
+     * Enriched with idea title. Founders only see their own data.
+     */
+    @GetMapping("/my-applications")
+    @Operation(summary = "List the caller's own VC funding applications")
+    public ResponseEntity<List<VcApplicationResponse>> getMyApplications(
+            @AuthenticationPrincipal UserPrincipal user) {
+
+        log.debug("getMyApplications — user: {}", user.getId());
+        List<VcApplicationResponse> apps = vcApplicationService.getMyApplications(user.getId());
+        return ResponseEntity.ok(apps);
     }
 }
