@@ -5,10 +5,11 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
- * Response DTO for a vc_applications row, enriched with the idea title.
+ * Response DTO for a vc_applications row, enriched with idea title + audit history.
  */
 @Data
 @Builder
@@ -24,9 +25,9 @@ public class VcApplicationResponse {
     private String ideaTitle;
 
     /**
-     * Lifecycle status.
-     * Founder-submitted:  submitted | under_review | interested | rejected
-     * Legacy VC requests: pending   | accepted     | rejected
+     * Lifecycle status (lowercase snake_case).
+     * Values: submitted | under_review | interested | rejected | funded
+     * Legacy VC intro-request values: pending | accepted
      */
     private String status;
 
@@ -36,4 +37,21 @@ public class VcApplicationResponse {
     private Instant reviewedAt;
     private Instant createdAt;
     private Instant updatedAt;
+
+    /**
+     * Ordered audit trail for this application (oldest → newest).
+     * Populated only when explicitly requested; null otherwise.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private List<HistoryEntry> history;
+
+    @Data
+    @Builder
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class HistoryEntry {
+        private String  oldStatus;
+        private String  newStatus;
+        private UUID    changedBy;
+        private Instant changedAt;
+    }
 }

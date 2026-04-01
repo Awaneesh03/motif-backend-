@@ -2,11 +2,13 @@ package com.motif.ideaforge.controller;
 
 import com.motif.ideaforge.model.dto.request.FundingQualificationRequest;
 import com.motif.ideaforge.model.dto.response.FundingQualificationResponse;
+import com.motif.ideaforge.model.dto.response.PagedResponse;
 import com.motif.ideaforge.model.dto.response.VcApplicationResponse;
 import com.motif.ideaforge.security.UserPrincipal;
 import com.motif.ideaforge.service.FundingQualificationService;
 import com.motif.ideaforge.service.VcApplicationService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -15,8 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 /**
  * Funding qualification endpoints.
@@ -70,16 +70,20 @@ public class FundingController {
     }
 
     /**
-     * Returns the authenticated founder's own VC funding applications.
+     * Returns the authenticated founder's own VC funding applications, paginated.
      * Enriched with idea title. Founders only see their own data.
      */
     @GetMapping("/my-applications")
-    @Operation(summary = "List the caller's own VC funding applications")
-    public ResponseEntity<List<VcApplicationResponse>> getMyApplications(
-            @AuthenticationPrincipal UserPrincipal user) {
+    @Operation(summary = "List the caller's own VC funding applications, paginated")
+    public ResponseEntity<PagedResponse<VcApplicationResponse>> getMyApplications(
+            @AuthenticationPrincipal UserPrincipal user,
+            @Parameter(description = "Zero-based page index (default 0)")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Page size, max 100 (default 10)")
+            @RequestParam(defaultValue = "10") int size) {
 
-        log.debug("getMyApplications — user: {}", user.getId());
-        List<VcApplicationResponse> apps = vcApplicationService.getMyApplications(user.getId());
-        return ResponseEntity.ok(apps);
+        log.debug("getMyApplications — user={}, page={}, size={}", user.getId(), page, size);
+        return ResponseEntity.ok(
+                vcApplicationService.getMyApplications(user.getId(), page, size));
     }
 }
