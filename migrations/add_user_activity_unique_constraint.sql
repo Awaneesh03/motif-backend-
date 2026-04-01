@@ -1,20 +1,17 @@
--- ── user_activity: partial unique constraint for race-condition-safe dedup ────
--- Enforces that the same (user_id, dedup_key) cannot be inserted more than once
--- within a 10-second window. Combined with the app-layer SELECT check this makes
--- concurrent inserts idempotent — the second writer gets a 23505 which the app
--- silently ignores.
+-- ── user_activity: dedup safety note ─────────────────────────────────────────
+-- A time-windowed unique index (e.g. on epoch/10 bucket) is NOT possible in
+-- PostgreSQL because EXTRACT(EPOCH FROM timestamptz) is not marked IMMUTABLE.
 --
--- Implementation: a unique index on a time-bucketed expression.
--- Bucket = Unix epoch truncated to 10-second intervals, stored as an integer.
--- Two inserts within the same 10s bucket → same bucket value → unique violation.
--- Inserts in different buckets → different value → allowed (correct long-term).
+-- Dedup is handled entirely at the application layer:
+--   Layer 1 — in-memory Map (10s window, same session, 0ms cost)
+--   Layer 2 — DB SELECT check (10s window, cross-session, ~50ms)
+--   Layer 3 — error.code === '23505' handler (defensive, silent)
+--
+-- The existing index idx_user_activity_dedup on (user_id, dedup_key, created_at DESC)
+-- from add_user_activity_dedup_key.sql is sufficient for query performance.
+--
+-- Nothing to run — this migration is a no-op.
 -- ─────────────────────────────────────────────────────────────────────────────
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_user_activity_dedup_unique
-    ON public.user_activity (
-        user_id,
-        dedup_key,
-        (EXTRACT(EPOCH FROM created_at)::BIGINT / 10)  -- 10-second bucket
-    );
-
-NOTIFY pgrst, 'reload schema';
+-- Clean up if the broken unique index was partially created:
+DROP INDEX IF EXISTS idx_user_activity_dedup_unique;
