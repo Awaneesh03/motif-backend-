@@ -77,11 +77,12 @@ public class ActivityService {
         }
 
         try {
+            long   t0           = System.currentTimeMillis();
             String resolvedTitle = (title != null && !title.isBlank())
                     ? title.trim()
                     : type.getValue();
             String dedupKey    = type.getValue() + ":" + resolvedTitle;
-            int    dedupBucket = (int) (System.currentTimeMillis() / 10_000L);
+            int    dedupBucket = (int) (t0 / 10_000L);
 
             // Strip metadata keys not in the allowed set for this type.
             // Prevents schema drift and metadata bloat from misconfigured callers.
@@ -106,7 +107,8 @@ public class ActivityService {
                     .executeUpdate();
 
             if (rows > 0) {
-                log.info("[ActivityService] logged type={} title='{}' user={}", type, resolvedTitle, userId);
+                log.info("[ActivityService] logged type={} title='{}' user={} elapsed={}ms",
+                        type, resolvedTitle, userId, System.currentTimeMillis() - t0);
             } else {
                 log.debug("[ActivityService] skipped duplicate type={} user={}", type, userId);
             }

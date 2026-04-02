@@ -163,7 +163,7 @@ public class AnalysisJobService {
             AnalysisResponse result = ideaAnalyzerService.analyzeIdea(userId, request);
             job.markCompleted(result);
             log.info("Job {} COMPLETED — score: {}", jobId, result.getScore());
-            activityService.log(userId, ActivityType.IDEA_ANALYZED, ideaTitle,
+            activityService.log(userId, ActivityType.IDEA_ANALYZED, job.getIdeaTitle(),
                     Map.of("score", result.getScore() != null ? result.getScore() : 0, "jobId", jobId));
 
         } catch (Exception firstException) {
@@ -180,7 +180,7 @@ public class AnalysisJobService {
                     AnalysisResponse result = ideaAnalyzerService.analyzeIdea(userId, request);
                     job.markCompleted(result);
                     log.info("Job {} COMPLETED on retry — score: {}", jobId, result.getScore());
-                    activityService.log(userId, ActivityType.IDEA_ANALYZED, ideaTitle,
+                    activityService.log(userId, ActivityType.IDEA_ANALYZED, job.getIdeaTitle(),
                             Map.of("score", result.getScore() != null ? result.getScore() : 0, "jobId", jobId));
                 } catch (Exception retryException) {
                     String message = retryException.getMessage() != null
