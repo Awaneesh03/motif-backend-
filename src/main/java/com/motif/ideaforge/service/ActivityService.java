@@ -10,7 +10,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -38,6 +41,24 @@ public class ActivityService {
 
     private final ObjectMapper objectMapper;
 
+    // ── Metadata schema per type ──────────────────────────────────────────────
+    // Defines the ONLY keys allowed in each event's metadata JSONB.
+    // Unknown keys are stripped before insert — keeps the schema documented in
+    // code and prevents unbounded metadata growth from misconfigured callers.
+
+    private static final Map<ActivityType, Set<String>> ALLOWED_META_KEYS;
+
+    static {
+        Map<ActivityType, Set<String>> m = new java.util.EnumMap<>(ActivityType.class);
+        m.put(ActivityType.IDEA_ANALYZED,     Set.of("score", "jobId"));
+        m.put(ActivityType.PITCH_CREATED,     Set.of("jobId"));
+        m.put(ActivityType.FUNDING_SUBMITTED, Set.of("stage", "fundingAmount"));
+        m.put(ActivityType.CASE_VIEWED,       Set.of("score"));
+        m.put(ActivityType.COMMUNITY_ACTION,  Set.of("action"));
+        m.put(ActivityType.PROFILE_UPDATED,   Set.of());
+        ALLOWED_META_KEYS = Collections.unmodifiableMap(m);
+    }
+
     // ── Public API ────────────────────────────────────────────────────────────
 
     /**
@@ -61,11 +82,15 @@ public class ActivityService {
                     : type.getValue();
             String dedupKey    = type.getValue() + ":" + resolvedTitle;
             int    dedupBucket = (int) (System.currentTimeMillis() / 10_000L);
-            String metaJson    = toJson(metadata);
+
+            // Strip metadata keys not in the allowed set for this type.
+            // Prevents schema drift and metadata bloat from misconfigured callers.
+            Map<String, Object> sanitized = sanitizeMetadata(type, metadata);
+            String metaJson = toJson(sanitized);
 
             // ON CONFLICT DO NOTHING — unique index (user_id, dedup_key, dedup_bucket)
             // makes this INSERT idempotent within any 10-second window.
-            em.createNativeQuery(
+            int rows = em.createNativeQuery(
                     "INSERT INTO public.user_activity " +
                     "  (id, user_id, type, title, metadata, dedup_key, dedup_bucket) " +
                     "VALUES " +
@@ -80,7 +105,11 @@ public class ActivityService {
                     .setParameter("dedupBucket", dedupBucket)
                     .executeUpdate();
 
-            log.debug("[ActivityService] logged type={} title='{}' user={}", type, resolvedTitle, userId);
+            if (rows > 0) {
+                log.info("[ActivityService] logged type={} title='{}' user={}", type, resolvedTitle, userId);
+            } else {
+                log.debug("[ActivityService] skipped duplicate type={} user={}", type, userId);
+            }
 
         } catch (Exception e) {
             log.warn("[ActivityService] failed to log type={} user={}: {}", type, userId, e.getMessage());
@@ -95,6 +124,29 @@ public class ActivityService {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Returns a copy of {@code metadata} containing only the keys declared in
+     * {@link #ALLOWED_META_KEYS} for the given type.
+     * Returns {@code null} if the type has no allowed keys or nothing survives.
+     * Unknown keys are logged at DEBUG so callers can be corrected over time.
+     */
+    private Map<String, Object> sanitizeMetadata(ActivityType type, Map<String, Object> metadata) {
+        if (metadata == null || metadata.isEmpty()) return null;
+
+        Set<String> allowed = ALLOWED_META_KEYS.getOrDefault(type, Set.of());
+        if (allowed.isEmpty()) return null;
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : metadata.entrySet()) {
+            if (allowed.contains(entry.getKey())) {
+                out.put(entry.getKey(), entry.getValue());
+            } else {
+                log.debug("[ActivityService] stripped unexpected metadata key='{}' for type={}", entry.getKey(), type);
+            }
+        }
+        return out.isEmpty() ? null : out;
+    }
 
     private String toJson(Map<String, Object> map) {
         if (map == null || map.isEmpty()) return null;
