@@ -8,6 +8,7 @@ import com.motif.ideaforge.model.dto.response.JobStatusResponse;
 import com.motif.ideaforge.model.dto.response.StartAnalysisResponse;
 import com.motif.ideaforge.model.job.AnalysisJob;
 import com.motif.ideaforge.model.job.AnalysisJob.JobStatus;
+import com.motif.ideaforge.model.ActivityType;
 import com.motif.ideaforge.service.ai.IdeaAnalyzerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +16,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Map;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,6 +49,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class AnalysisJobService {
 
     private final IdeaAnalyzerService ideaAnalyzerService;
+    private final ActivityService activityService;
 
     // ── In-memory stores ──────────────────────────────────────────────────────
 
@@ -160,6 +163,8 @@ public class AnalysisJobService {
             AnalysisResponse result = ideaAnalyzerService.analyzeIdea(userId, request);
             job.markCompleted(result);
             log.info("Job {} COMPLETED — score: {}", jobId, result.getScore());
+            activityService.log(userId, ActivityType.IDEA_ANALYZED, ideaTitle,
+                    Map.of("score", result.getScore() != null ? result.getScore() : 0, "jobId", jobId));
 
         } catch (Exception firstException) {
             // One automatic retry for transient failures (timeout, network blip, parse error)
@@ -175,6 +180,8 @@ public class AnalysisJobService {
                     AnalysisResponse result = ideaAnalyzerService.analyzeIdea(userId, request);
                     job.markCompleted(result);
                     log.info("Job {} COMPLETED on retry — score: {}", jobId, result.getScore());
+                    activityService.log(userId, ActivityType.IDEA_ANALYZED, ideaTitle,
+                            Map.of("score", result.getScore() != null ? result.getScore() : 0, "jobId", jobId));
                 } catch (Exception retryException) {
                     String message = retryException.getMessage() != null
                             ? retryException.getMessage() : "Analysis failed after retry";

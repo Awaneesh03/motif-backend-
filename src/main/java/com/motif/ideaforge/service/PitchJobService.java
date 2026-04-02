@@ -2,6 +2,7 @@ package com.motif.ideaforge.service;
 
 import com.motif.ideaforge.exception.ResourceNotFoundException;
 import com.motif.ideaforge.exception.UnauthorizedException;
+import com.motif.ideaforge.model.ActivityType;
 import com.motif.ideaforge.model.dto.request.GeneratePitchRequest;
 import com.motif.ideaforge.model.dto.response.PitchJobStatusResponse;
 import com.motif.ideaforge.model.dto.response.PitchResponse;
@@ -40,6 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class PitchJobService {
 
     private final PitchGeneratorService pitchGeneratorService;
+    private final ActivityService activityService;
 
     // ── In-memory stores ──────────────────────────────────────────────────────
 
@@ -150,6 +152,7 @@ public class PitchJobService {
             job.markCompleted(result);
             log.info("Pitch job {} COMPLETED — {} slides", jobId,
                     result.getSlides() != null ? result.getSlides().size() : 0);
+            activityService.log(userId, ActivityType.PITCH_CREATED, request.getIdeaName());
 
         } catch (Exception e) {
             String message = e.getMessage() != null ? e.getMessage() : "Pitch generation failed";

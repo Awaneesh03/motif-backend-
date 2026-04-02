@@ -2,8 +2,10 @@ package com.motif.ideaforge.service.ai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.motif.ideaforge.exception.AIServiceException;
+import com.motif.ideaforge.model.ActivityType;
 import com.motif.ideaforge.model.dto.request.EvaluateCaseRequest;
 import com.motif.ideaforge.model.dto.response.CaseEvaluationResponse;
+import com.motif.ideaforge.service.ActivityService;
 import com.motif.ideaforge.service.ai.OpenAIService.ChatMessage;
 import com.motif.ideaforge.service.ai.OpenAIService.OpenAIResponse;
 import lombok.AllArgsConstructor;
@@ -25,6 +27,7 @@ public class CaseEvaluatorService {
 
     private final OpenAIService openAIService;
     private final ObjectMapper objectMapper;
+    private final ActivityService activityService;
 
     public CaseEvaluationResponse evaluateCase(UUID userId, EvaluateCaseRequest request) {
         log.info("Evaluating case for user: {}", userId);
@@ -43,6 +46,7 @@ public class CaseEvaluatorService {
         }
         String content = msg.getContent();
         EvalResult result = parseResponse(content);
+        activityService.log(userId, ActivityType.CASE_VIEWED, request.getCaseTitle());
         return CaseEvaluationResponse.builder().score(result.getScore()).verdict(result.getVerdict()).feedback(result.getFeedback()).strengths(result.getStrengths()).improvements(result.getImprovements()).timestamp(Instant.now()).build();
     }
 
